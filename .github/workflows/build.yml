@@ -36,11 +36,16 @@ jobs:
 
       - name: Clone Submodules
         run: |
-          git clone --depth=1 -b legacy https://github.com/sidex15/KernelSU-Next.git ksn
+          git clone --depth=1 -b v4.2.0-rc3 https://github.com/Baka-SU/BakaSU.git bakasu
+          ln -sfn $PWD/bakasu/kernel kernel/drivers/kernelsu
           git clone --depth=1 https://github.com/vc-teahouse/Baseband-guard.git kbg
-          ln -sfn $PWD/ksn/kernel kernel/drivers/kernelsu
           ln -sfn $PWD/kbg kernel/security/baseband-guard
+          rm -rf kernel/anykernel
+          git clone --depth=1 -b kona https://github.com/liyafe1997/AnyKernel3.git kernel/anykernel
+          echo "--- verify ---"
           ls kernel/drivers/kernelsu/Kconfig kernel/security/baseband-guard/Kconfig
+          ls kernel/anykernel/anykernel.sh kernel/anykernel/META-INF
+          grep -n "device.name5" kernel/anykernel/anykernel.sh
 
       - name: Install Dependencies
         run: |
@@ -79,6 +84,16 @@ jobs:
           else
             bash build.sh lmi ksu "${{ inputs.rom }}"
           fi
+
+      - name: Verify Kernel Config
+        if: always()
+        run: |
+          echo "=== out/.config 关键项 ==="
+          for k in CONFIG_KSU CONFIG_KSU_MANUAL_HOOK CONFIG_SECURITY_YAMA CONFIG_SECURITY_DMESG_RESTRICT CONFIG_FORTIFY_SOURCE CONFIG_SCHEDSTATS CONFIG_SCHED_INFO CONFIG_DEBUG_KERNEL CONFIG_SCHED_DEBUG CONFIG_PROFILING CONFIG_LOCKDEP CONFIG_DEBUG_INFO CONFIG_KALLSYMS_ALL CONFIG_LOCALVERSION CONFIG_LTO CONFIG_CFI_CLANG; do
+            printf "%-38s : %s\n" "$k" "$(grep -E "^${k}(=| is not set)" kernel/out/.config 2>/dev/null | head -1)"
+          done
+          echo "=== Image 版本串 ==="
+          strings kernel/out/arch/arm64/boot/Image 2>/dev/null | grep -m1 "Linux version"
 
       - name: Locate Artifacts
         if: always()
