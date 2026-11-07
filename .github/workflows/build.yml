@@ -1,0 +1,53 @@
+name: Build Kernel - lmi
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build lmi (KSU)
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout CI
+      uses: actions/checkout@v4
+
+    - name: Cleanup Disk Space
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+    - name: Clone Kernel Source (GitLab)
+      run: |
+        git clone --depth=1 -b android16-aptusitu \
+          https://gitlab.com/kaixenberg/android_kernel_xiaomi_sm8250.git kernel
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3
+        sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+
+    - name: Setup Toolchain (ZyC-Clang 15)
+      run: |
+        mkdir -p $HOME/zyc-clang
+        cd $HOME/zyc-clang
+        wget -q https://github.com/ZyCromerZ/Clang/releases/download/15.0.7-20251111-release/Clang-15.0.7-20251111.tar.gz
+        tar -zxvf Clang-15.0.7-20251111.tar.gz
+
+    - name: Build Kernel (lmi + KSU)
+      run: |
+        cd kernel
+        chmod +x build.sh
+        bash build.sh lmi ksu
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: Kernel-lmi-KSU
+        path: |
+          kernel/*.zip
+          kernel/anykernel/*.zip
+        if-no-files-found: error
