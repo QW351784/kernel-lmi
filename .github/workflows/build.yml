@@ -19,104 +19,73 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout CI
-      uses: actions/checkout@v4
+      - name: Checkout CI
+        uses: actions/checkout@v4
 
-    - name: Cleanup Disk Space
-      run: |
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /opt/ghc
-        sudo rm -rf "/usr/local/share/boost"
-        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+      - name: Cleanup Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
 
-    - name: Clone Kernel Source (GitLab)
-      run: |
-        git clone --depth=1 -b android16-aptusitu \
-          https://gitlab.com/kaixenberg/android_kernel_xiaomi_sm8250.git kernel
+      - name: Clone Kernel Source
+        run: |
+          git clone --depth=1 -b android16-aptusitu https://gitlab.com/kaixenberg/android_kernel_xiaomi_sm8250.git kernel
 
-    - name: Clone Submodules
-      run: |
-        git clone --depth=1 -b legacy https://github.com/sidex15/KernelSU-Next.git ksn
-        git clone --depth=1 https://github.com/vc-teahouse/Baseband-guard.git kbg
-        ln -sfn $PWD/ksn/kernel kernel/drivers/kernelsu
-        ln -sfn $PWD/kbg kernel/security/baseband-guard
-        ls kernel/drivers/kernelsu/Kconfig kernel/security/baseband-guard/Kconfig
+      - name: Clone Submodules
+        run: |
+          git clone --depth=1 -b legacy https://github.com/sidex15/KernelSU-Next.git ksn
+          git clone --depth=1 https://github.com/vc-teahouse/Baseband-guard.git kbg
+          ln -sfn $PWD/ksn/kernel kernel/drivers/kernelsu
+          ln -sfn $PWD/kbg kernel/security/baseband-guard
+          ls kernel/drivers/kernelsu/Kconfig kernel/security/baseband-guard/Kconfig
 
-    - name: Install Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3
-        sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
-    - name: Setup Toolchain (ZyC-Clang 15)
-      run: |
-        mkdir -p $HOME/zyc-clang
-        cd $HOME/zyc-clang
-        wget -q https://github.com/ZyCromerZ/Clang/releases/download/15.0.7-20251111-release/Clang-15.0.7-20251111.tar.gz
-        tar -zxvf Clang-15.0.7-20251111.tar.gz
+      - name: Setup Toolchain
+        run: |
+          mkdir -p $HOME/zyc-clang
+          cd $HOME/zyc-clang
+          wget -q https://github.com/ZyCromerZ/Clang/releases/download/15.0.7-20251111-release/Clang-15.0.7-20251111.tar.gz
+          tar -zxvf Clang-15.0.7-20251111.tar.gz
 
-    - name: Apply Custom Optimizations
-      run: |
-        cd kernel
-        python3 - <<'PYEOF'
-        p = "build.sh"
-        s = open(p).read()
-        anchor = 'echo "MIUI-specific configs applied" >> "$LOG_FILE"'
-        inject = anchor + """
+      - name: Apply Custom Optimizations
+        run: |
+          python3 .github/scripts/patch_build.py kernel/build.sh
+          grep -n "custom perf opts" kernel/build.sh
 
-          # === custom perf opts ===
-          scripts/config --file out/.config \
-            -d DEBUG_KERNEL \
-            -d SCHED_DEBUG \
-            -d DEBUG_SPINLOCK \
-            -d DEBUG_MUTEXES \
-            -d DEBUG_LOCK_ALLOC \
-            -d PROVE_LOCKING \
-            -d PROFILING \
-            -e CC_OPTIMIZE_FOR_PERFORMANCE \
-            -e SECURITY_YAMA \
-            -e SECURITY_DMESG_RESTRICT \
-            -e FORTIFY_SOURCE \
-            -d SCHEDSTATS \
-            -d SCHED_INFO
-          echo "custom perf opts applied" >> "$LOG_FILE"
-"""
-        assert anchor in s, "anchor not found"
-        s = s.replace(anchor, inject, 1)
-        open(p, "w").write(s)
-        print("patched build.sh")
-        PYEOF
-        grep -n "custom perf opts" build.sh
+      - name: Build Kernel
+        run: |
+          cd kernel
+          chmod +x build.sh
+          bash build.sh lmi ksu "${{ inputs.rom }}"
 
-    - name: Build Kernel
-      run: |
-        cd kernel
-        chmod +x build.sh
-        bash build.sh lmi ksu ${{ inputs.rom }}
+      - name: Locate Artifacts
+        if: always()
+        run: |
+          echo "=== zip 文件 ==="
+          find . -name "*.zip" -not -path "*/.git/*" | head -20
+          echo "=== out/lmi ==="
+          ls -la kernel/out/lmi/ 2>/dev/null || echo "no kernel/out/lmi"
 
-    - name: Locate Artifacts
-      if: always()
-      run: |
-        echo "=== 查找 zip ==="
-        find . -name "*.zip" -not -path "*/.git/*" -newermt "-2 hours" | head -20
-        echo "=== kernel/out 目录 ==="
-        ls -la kernel/out/lmi/ 2>/dev/null || echo "kernel/out/lmi 不存在"
-        ls -la out/lmi/ 2>/dev/null || echo "out/lmi 不存在"
-
-    - name: Publish Release
-      if: always()
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: build-${{ github.run_number }}
-        name: Kernel lmi ${{ inputs.rom }} build ${{ github.run_number }}
-        body: |
-          rom: ${{ inputs.rom }}
-          run: ${{ github.run_number }}
-        files: |
-          kernel/out/**/*.zip
-          kernel/anykernel/*.zip
-          **/*.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish Release
+        if: always()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Kernel lmi ${{ inputs.rom }} #${{ github.run_number }}
+          body: |
+            rom: ${{ inputs.rom }}
+            run: ${{ github.run_number }}
+          files: |
+            kernel/out/**/*.zip
+            kernel/anykernel/*.zip
+            **/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
