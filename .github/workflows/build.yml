@@ -60,15 +60,6 @@ jobs:
           wget -q https://github.com/ZyCromerZ/Clang/releases/download/15.0.7-20251111-release/Clang-15.0.7-20251111.tar.gz
           tar -zxvf Clang-15.0.7-20251111.tar.gz
 
-      - name: Setup ccache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ccache_mikernel
-          key: ccache-${{ inputs.rom }}-${{ github.run_id }}
-          restore-keys: |
-            ccache-${{ inputs.rom }}-
-            ccache-
-
       - name: Apply Custom Optimizations
         run: |
           python3 .github/scripts/patch_build.py kernel/build.sh
