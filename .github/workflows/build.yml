@@ -60,7 +60,9 @@ jobs:
             -e CC_OPTIMIZE_FOR_PERFORMANCE \
             -e SECURITY_YAMA \
             -e SECURITY_DMESG_RESTRICT \
-            -e FORTIFY_SOURCE
+            -e FORTIFY_SOURCE \
+            -d SCHEDSTATS \
+            -d SCHED_INFO
           echo "custom perf opts applied" >> "$LOG_FILE"'''
         assert anchor in s, "anchor not found"
         s = s.replace(anchor, inject, 1)
