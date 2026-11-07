@@ -57,7 +57,10 @@ jobs:
             -d DEBUG_LOCK_ALLOC \
             -d PROVE_LOCKING \
             -d PROFILING \
-            -e CC_OPTIMIZE_FOR_PERFORMANCE
+            -e CC_OPTIMIZE_FOR_PERFORMANCE \
+            -e SECURITY_YAMA \
+            -e SECURITY_DMESG_RESTRICT \
+            -e FORTIFY_SOURCE
           echo "custom perf opts applied" >> "$LOG_FILE"'''
         assert anchor in s, "anchor not found"
         s = s.replace(anchor, inject, 1)
