@@ -24,6 +24,15 @@ jobs:
         git clone --depth=1 -b android16-aptusitu \
           https://gitlab.com/kaixenberg/android_kernel_xiaomi_sm8250.git kernel
 
+    - name: Clone Submodules (KernelSU-Next & Baseband-guard)
+      run: |
+        git clone --depth=1 -b legacy https://github.com/sidex15/KernelSU-Next.git ksn
+        git clone --depth=1 https://github.com/vc-teahouse/Baseband-guard.git kbg
+        ln -sfn $PWD/ksn/kernel kernel/drivers/kernelsu
+        ln -sfn $PWD/kbg kernel/security/baseband-guard
+        echo "--- 校验 ---"
+        ls kernel/drivers/kernelsu/Kconfig kernel/security/baseband-guard/Kconfig
+
     - name: Install Dependencies
       run: |
         sudo apt-get update
