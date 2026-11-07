@@ -28,6 +28,7 @@ if anchor not in s:
     print("ANCHOR NOT FOUND, skip")
     sys.exit(1)
 
+s = s.replace("O=out CC=clang", 'O=out CC="ccache clang"', 1)
 s = s.replace(anchor, inject, 1)
 open(p, "w").write(s)
 print("patched", p)
