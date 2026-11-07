@@ -39,6 +39,33 @@ jobs:
         sudo apt-get install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3
         sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
+    - name: Apply Custom Optimizations
+      run: |
+        cd kernel
+        python3 - <<'PYEOF'
+        p = "build.sh"
+        s = open(p).read()
+        anchor = 'echo "MIUI-specific configs applied" >> "$LOG_FILE"'
+        inject = anchor + '''
+
+          # === custom perf opts (low risk, debug only) ===
+          scripts/config --file out/.config \
+            -d DEBUG_KERNEL \
+            -d SCHED_DEBUG \
+            -d DEBUG_SPINLOCK \
+            -d DEBUG_MUTEXES \
+            -d DEBUG_LOCK_ALLOC \
+            -d PROVE_LOCKING \
+            -d PROFILING \
+            -e CC_OPTIMIZE_FOR_PERFORMANCE
+          echo "custom perf opts applied" >> "$LOG_FILE"'''
+        assert anchor in s, "anchor not found"
+        s = s.replace(anchor, inject, 1)
+        open(p, "w").write(s)
+        print("patched build.sh")
+        PYEOF
+        grep -n "custom perf opts" build.sh
+
     - name: Setup Toolchain (ZyC-Clang 15)
       run: |
         mkdir -p $HOME/zyc-clang
