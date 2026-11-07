@@ -58,7 +58,7 @@ jobs:
       - name: Setup ccache
         uses: actions/cache@v4
         with:
-          path: ~/.ccache
+          path: ~/.cache/ccache_mikernel
           key: ccache-${{ inputs.rom }}-${{ github.run_id }}
           restore-keys: |
             ccache-${{ inputs.rom }}-
