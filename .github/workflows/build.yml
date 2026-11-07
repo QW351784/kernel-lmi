@@ -2,10 +2,22 @@ name: Build Kernel - lmi
 
 on:
   workflow_dispatch:
+    inputs:
+      rom:
+        description: 'ROM type'
+        required: true
+        default: 'miui'
+        type: choice
+        options:
+          - miui
+          - aosp
+          - both
+
+permissions:
+  contents: write
 
 jobs:
   build:
-    name: Build lmi (KSU)
     runs-on: ubuntu-latest
 
     steps:
@@ -24,13 +36,12 @@ jobs:
         git clone --depth=1 -b android16-aptusitu \
           https://gitlab.com/kaixenberg/android_kernel_xiaomi_sm8250.git kernel
 
-    - name: Clone Submodules (KernelSU-Next & Baseband-guard)
+    - name: Clone Submodules
       run: |
         git clone --depth=1 -b legacy https://github.com/sidex15/KernelSU-Next.git ksn
         git clone --depth=1 https://github.com/vc-teahouse/Baseband-guard.git kbg
         ln -sfn $PWD/ksn/kernel kernel/drivers/kernelsu
         ln -sfn $PWD/kbg kernel/security/baseband-guard
-        echo "--- 校验 ---"
         ls kernel/drivers/kernelsu/Kconfig kernel/security/baseband-guard/Kconfig
 
     - name: Install Dependencies
@@ -39,6 +50,13 @@ jobs:
         sudo apt-get install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3
         sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
+    - name: Setup Toolchain (ZyC-Clang 15)
+      run: |
+        mkdir -p $HOME/zyc-clang
+        cd $HOME/zyc-clang
+        wget -q https://github.com/ZyCromerZ/Clang/releases/download/15.0.7-20251111-release/Clang-15.0.7-20251111.tar.gz
+        tar -zxvf Clang-15.0.7-20251111.tar.gz
+
     - name: Apply Custom Optimizations
       run: |
         cd kernel
@@ -46,9 +64,9 @@ jobs:
         p = "build.sh"
         s = open(p).read()
         anchor = 'echo "MIUI-specific configs applied" >> "$LOG_FILE"'
-        inject = anchor + '''
+        inject = anchor + """
 
-          # === custom perf opts (low risk, debug only) ===
+          # === custom perf opts ===
           scripts/config --file out/.config \
             -d DEBUG_KERNEL \
             -d SCHED_DEBUG \
@@ -63,7 +81,8 @@ jobs:
             -e FORTIFY_SOURCE \
             -d SCHEDSTATS \
             -d SCHED_INFO
-          echo "custom perf opts applied" >> "$LOG_FILE"'''
+          echo "custom perf opts applied" >> "$LOG_FILE"
+"""
         assert anchor in s, "anchor not found"
         s = s.replace(anchor, inject, 1)
         open(p, "w").write(s)
@@ -71,22 +90,33 @@ jobs:
         PYEOF
         grep -n "custom perf opts" build.sh
 
-    - name: Setup Toolchain (ZyC-Clang 15)
-      run: |
-        mkdir -p $HOME/zyc-clang
-        cd $HOME/zyc-clang
-        wget -q https://github.com/ZyCromerZ/Clang/releases/download/15.0.7-20251111-release/Clang-15.0.7-20251111.tar.gz
-        tar -zxvf Clang-15.0.7-20251111.tar.gz
-
-    - name: Build Kernel (lmi + KSU)
+    - name: Build Kernel
       run: |
         cd kernel
         chmod +x build.sh
-        bash build.sh lmi ksu miui
+        bash build.sh lmi ksu ${{ inputs.rom }}
 
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
+    - name: Locate Artifacts
+      if: always()
+      run: |
+        echo "=== 查找 zip ==="
+        find . -name "*.zip" -not -path "*/.git/*" -newermt "-2 hours" | head -20
+        echo "=== kernel/out 目录 ==="
+        ls -la kernel/out/lmi/ 2>/dev/null || echo "kernel/out/lmi 不存在"
+        ls -la out/lmi/ 2>/dev/null || echo "out/lmi 不存在"
+
+    - name: Publish Release
+      if: always()
+      uses: softprops/action-gh-release@v2
       with:
-        name: Kernel-lmi-KSU
-        path: kernel/out/**/*.zip
-        if-no-files-found: error
+        tag_name: build-${{ github.run_number }}
+        name: Kernel lmi ${{ inputs.rom }} build ${{ github.run_number }}
+        body: |
+          rom: ${{ inputs.rom }}
+          run: ${{ github.run_number }}
+        files: |
+          kernel/out/**/*.zip
+          kernel/anykernel/*.zip
+          **/*.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
