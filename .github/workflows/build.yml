@@ -64,7 +64,12 @@ jobs:
         run: |
           cd kernel
           chmod +x build.sh
-          bash build.sh lmi ksu "${{ inputs.rom }}"
+          if [ "${{ inputs.rom }}" = "both" ]; then
+            echo "building both AOSP + MIUI"
+            bash build.sh lmi ksu
+          else
+            bash build.sh lmi ksu "${{ inputs.rom }}"
+          fi
 
       - name: Locate Artifacts
         if: always()
