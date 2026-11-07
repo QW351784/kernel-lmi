@@ -50,13 +50,11 @@ jobs:
       run: |
         cd kernel
         chmod +x build.sh
-        bash build.sh lmi ksu
+        bash build.sh lmi ksu miui
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: Kernel-lmi-KSU
-        path: |
-          kernel/*.zip
-          kernel/anykernel/*.zip
+        path: kernel/out/**/*.zip
         if-no-files-found: error
