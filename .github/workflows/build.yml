@@ -102,6 +102,9 @@ jobs:
           if [ "${{ inputs.rom }}" = "both" ]; then
             echo "building both AOSP + MIUI"
             bash build.sh lmi ksu
+          elif [ "${{ inputs.lto }}" = "full" ]; then
+            echo "full LTO: limiting jobs to 1 to reduce memory pressure"
+            bash build.sh lmi ksu "${{ inputs.rom }}" -L full -J1
           else
             bash build.sh lmi ksu "${{ inputs.rom }}" -L ${{ inputs.lto }}
           fi
