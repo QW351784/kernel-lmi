@@ -58,8 +58,14 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3 libxml2-utils libxml2-dev
+          sudo apt-get install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3 libxml2-utils
           sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+
+      - name: Fix libxml2 for ld.lld
+        run: |
+          sudo apt-get install -y libxml2t64 || sudo apt-get install -y libxml2 || true
+          echo "--- verify ---"
+          ldconfig -p | grep libxml2 || true
 
       - name: Setup Toolchain
         run: |
