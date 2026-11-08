@@ -41,37 +41,28 @@ jobs:
 
       - name: Clone Kernel Source
         run: |
-          git clone --depth=1 -b android16-aptusitu https://gitlab.com/kaixenberg/android_kernel_xiaomi_sm8250.git kernel
+          git clone --depth=500 -b android16-aptusitu https://gitlab.com/kaixenberg/android_kernel_xiaomi_sm8250.git kernel
 
       - name: Upgrade CIP Base (try cip136)
-        id: cipupgrade
-        continue-on-error: true
         run: |
           cd kernel
-          echo "=== current baseline ==="
-          grep -m1 "CIP" Makefile | head -2 || true
           git remote add cip https://git.kernel.org/pub/scm/linux/kernel/git/cip/linux-cip.git 2>/dev/null || true
-          echo "=== fetch cip136 (shallow) ==="
-          timeout 240 git fetch --depth=1 cip refs/tags/v4.19.325-cip136:refs/tags/cip136-target 2>&1 | tail -5 || { echo "FETCH_FAILED"; exit 0; }
-          echo "=== merge (no commit) ==="
+          echo "=== fetch cip136 with history ==="
+          timeout 300 git fetch --depth=500 cip refs/tags/v4.19.325-cip136:refs/tags/cip136-target 2>&1 | tail -5 || { echo "FETCH_FAILED"; exit 1; }
+          echo "=== ancestor check ==="
+          git merge-base --is-ancestor cip136-target HEAD 2>/dev/null && echo "already-ancestor" || echo "need-merge"
+          echo "=== merge ==="
           git -c user.email="ci@local" -c user.name="ci" merge --no-commit --no-ff cip136-target 2>&1 | tail -20
-          echo "=== conflict list ==="
-          git status --short | grep -E "^UU|^AA|^DU|^UD" | head -30 || echo "no conflicts"
-          echo "=== conflict count ==="
-          git status --short | grep -cE "^UU|^AA|^DU|^UD" || echo 0
-
-      - name: Report CIP Upgrade Result
-        run: |
-          cd kernel
-          echo "=== unresolved conflicts ==="
-          git status --short | grep -cE "^UU|^AA|^DU|^UD" || echo 0
+          rc=$?
+          echo "=== conflict check ==="
           if git status --short | grep -qE "^UU|^AA|^DU|^UD"; then
-            echo "CIP_UPGRADE_CONFLICT=yes"
+            echo "CONFLICT_FILES:"
+            git status --short | grep -E "^UU|^AA|^DU|^UD" | head -40
+            echo "CIP_MERGE_RESULT=CONFLICT"
             git merge --abort || true
-            echo "aborted merge, falling back to cip127 baseline"
-          else
-            echo "CIP_UPGRADE_CONFLICT=no"
+            exit 1
           fi
+          echo "CIP_MERGE_RESULT=OK"
 
       - name: Clone Submodules
         run: |
