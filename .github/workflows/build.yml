@@ -12,6 +12,14 @@ on:
           - miui
           - aosp
           - both
+      lto:
+        description: 'LTO mode'
+        required: false
+        default: 'none'
+        type: choice
+        options:
+          - none
+          - thin
 
 permissions:
   contents: write
@@ -80,7 +88,7 @@ jobs:
             echo "building both AOSP + MIUI"
             bash build.sh lmi ksu
           else
-            bash build.sh lmi ksu "${{ inputs.rom }}"
+            bash build.sh lmi ksu "${{ inputs.rom }}" -L ${{ inputs.lto }}
           fi
 
       - name: Verify Kernel Config
