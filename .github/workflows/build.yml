@@ -63,9 +63,16 @@ jobs:
 
       - name: Fix libxml2 for ld.lld
         run: |
-          sudo apt-get install -y libxml2t64 || sudo apt-get install -y libxml2 || true
+          # runner 系统提供的是 libxml2.so.16，工具链 ld.lld 需要老的 .so.2
+          LIBXML=$(ldconfig -p | grep -oP 'libxml2\.so\.\K[0-9]+' | head -1 || true)
+          echo "system libxml2 soname: $LIBXML"
+          if [ -n "$LIBXML" ] && [ "$LIBXML" != "2" ]; then
+            sudo ln -sf /usr/lib/x86_64-linux-gnu/libxml2.so.$LIBXML /usr/lib/x86_64-linux-gnu/libxml2.so.2
+            sudo ldconfig
+          fi
           echo "--- verify ---"
-          ldconfig -p | grep libxml2 || true
+          ldconfig -p | grep "libxml2.so.2" || echo "STILL MISSING""
+
 
       - name: Setup Toolchain
         run: |
