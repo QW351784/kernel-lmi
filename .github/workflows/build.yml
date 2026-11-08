@@ -20,6 +20,7 @@ on:
         options:
           - none
           - thin
+          - full
 
 permissions:
   contents: write
