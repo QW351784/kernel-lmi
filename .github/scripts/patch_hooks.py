@@ -51,6 +51,9 @@ old_newfstat = """SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user
 }"""
 new_newfstat = """SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 {
+#ifdef CONFIG_KSU
+	extern void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr);
+#endif
 	struct kstat stat;
 	int error = vfs_fstat(fd, &stat);
 
@@ -58,7 +61,6 @@ new_newfstat = """SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user
 		error = cp_new_stat(&stat, statbuf);
 
 #ifdef CONFIG_KSU
-	extern void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr);
 	ksu_handle_newfstat_ret(&fd, &statbuf);
 #endif
 	return error;
@@ -81,6 +83,9 @@ old_fstat64 = """SYSCALL_DEFINE2(fstat64, unsigned long, fd, struct stat64 __use
 }"""
 new_fstat64 = """SYSCALL_DEFINE2(fstat64, unsigned long, fd, struct stat64 __user *, statbuf)
 {
+#ifdef CONFIG_KSU
+	extern void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **statbuf_ptr);
+#endif
 	struct kstat stat;
 	int error = vfs_fstat(fd, &stat);
 
@@ -88,7 +93,6 @@ new_fstat64 = """SYSCALL_DEFINE2(fstat64, unsigned long, fd, struct stat64 __use
 		error = cp_new_stat64(&stat, statbuf);
 
 #ifdef CONFIG_KSU
-	extern void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **statbuf_ptr);
 	ksu_handle_fstat64_ret(&fd, &statbuf);
 #endif
 	return error;
