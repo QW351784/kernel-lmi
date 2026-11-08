@@ -77,11 +77,21 @@ jobs:
 
       - name: Setup Toolchain
         run: |
+          sudo apt-get install -y zstd || true
           mkdir -p $HOME/zyc-clang
           cd $HOME/zyc-clang
-          wget -q https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260807-release/Clang-16.0.6-20260807.tar.gz
-          tar -zxvf Clang-16.0.6-20260807.tar.gz
-          ls -la $HOME/zyc-clang/bin/clang 2>/dev/null || (echo "bin not at root, checking layout" && find $HOME/zyc-clang -maxdepth 3 -name "clang*" -type f | head -5)
+          wget -q https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/06092026/neutron-clang-06092026.tar.zst
+          tar --zstd -xf neutron-clang-06092026.tar.zst || (echo "tar --zstd failed, trying zstd -d" && zstd -d -c neutron-clang-06092026.tar.zst | tar -x)
+          echo "--- layout check ---"
+          CLANG_BIN=$(find $HOME/zyc-clang -maxdepth 3 -type f -name "clang" | head -1)
+          echo "clang at: $CLANG_BIN"
+          if [ -n "$CLANG_BIN" ] && [ "$CLANG_BIN" != "$HOME/zyc-clang/bin/clang" ]; then
+            CLANG_DIR=$(dirname "$CLANG_BIN")
+            rm -rf $HOME/zyc-clang/bin
+            ln -sfn "$CLANG_DIR" $HOME/zyc-clang/bin
+          fi
+          ls -la $HOME/zyc-clang/bin/clang || (echo "final fallback search" && find $HOME/zyc-clang -maxdepth 4 -name "clang*" -type f | head -5)
+          $HOME/zyc-clang/bin/clang --version || true
 
       - name: Apply Custom Optimizations
         run: |
@@ -118,8 +128,8 @@ jobs:
           done
           echo "=== Image 版本串 ==="
           strings kernel/out/arch/arm64/boot/Image 2>/dev/null | grep -m1 "Linux version"
-          echo "=== LTO thin 强校验 ==="
-          grep -E "^CONFIG_LTO_CLANG_THIN=y$|^CONFIG_LTO_NONE=y$" kernel/out/.config
+          echo "=== LTO thin 强校验（4.19 真名 CONFIG_THINLTO）==="
+          grep -E "^CONFIG_THINLTO=y$|^CONFIG_LTO_NONE=y$" kernel/out/.config
           echo "=== Image 内嵌配置（真实）==="
           cp kernel/scripts/extract-ikconfig /tmp/eik 2>/dev/null; chmod +x /tmp/eik
           /tmp/eik kernel/out/arch/arm64/boot/Image 2>/dev/null | grep -E "^CONFIG_(LTO_CLANG_THIN|LTO_NONE|KSU|LOCALVERSION|SCHED_DEBUG|SCHEDSTATS|PROFILING)" | head -12
