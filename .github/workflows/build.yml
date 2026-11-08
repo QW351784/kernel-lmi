@@ -71,7 +71,7 @@ jobs:
             sudo ldconfig
           fi
           echo "--- verify ---"
-          ldconfig -p | grep "libxml2.so.2" || echo "STILL MISSING""
+          ldconfig -p | grep "libxml2.so.2" || echo "STILL MISSING"
 
 
       - name: Setup Toolchain
