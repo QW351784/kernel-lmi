@@ -65,6 +65,13 @@ jobs:
           python3 .github/scripts/patch_build.py kernel/build.sh
           grep -n "custom perf opts" kernel/build.sh
 
+      - name: Apply BakaSU Hook Patch
+        run: |
+          python3 .github/scripts/patch_hooks.py kernel
+          echo "--- verify ---"
+          grep -c "ksu_vfs_read_hook" kernel/fs/read_write.c || echo "clean"
+          grep -n "ksu_handle_newfstat_ret" kernel/fs/stat.c | head -2
+
       - name: Build Kernel
         run: |
           cd kernel
