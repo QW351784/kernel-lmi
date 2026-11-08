@@ -78,8 +78,9 @@ jobs:
         run: |
           mkdir -p $HOME/zyc-clang
           cd $HOME/zyc-clang
-          wget -q https://github.com/ZyCromerZ/Clang/releases/download/15.0.7-20251111-release/Clang-15.0.7-20251111.tar.gz
-          tar -zxvf Clang-15.0.7-20251111.tar.gz
+          wget -q https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260807-release/Clang-16.0.6-20260807.tar.gz
+          tar -zxvf Clang-16.0.6-20260807.tar.gz
+          ls -la $HOME/zyc-clang/bin/clang 2>/dev/null || (echo "bin not at root, checking layout" && find $HOME/zyc-clang -maxdepth 3 -name "clang*" -type f | head -5)
 
       - name: Apply Custom Optimizations
         run: |
