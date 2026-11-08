@@ -113,6 +113,13 @@ jobs:
           done
           echo "=== Image 版本串 ==="
           strings kernel/out/arch/arm64/boot/Image 2>/dev/null | grep -m1 "Linux version"
+          echo "=== LTO thin 强校验 ==="
+          grep -E "^CONFIG_LTO_CLANG_THIN=y$|^CONFIG_LTO_NONE=y$" kernel/out/.config
+          echo "=== Image 内嵌配置（真实）==="
+          cp kernel/scripts/extract-ikconfig /tmp/eik 2>/dev/null; chmod +x /tmp/eik
+          /tmp/eik kernel/out/arch/arm64/boot/Image 2>/dev/null | grep -E "^CONFIG_(LTO_CLANG_THIN|LTO_NONE|KSU|LOCALVERSION|SCHED_DEBUG|SCHEDSTATS|PROFILING)" | head -12
+          echo "=== 归档 .config 供下载 ==="
+          mkdir -p kernel/out/artifacts && cp kernel/out/.config kernel/out/artifacts/build.config && ls -lh kernel/out/artifacts/
 
       - name: Locate Artifacts
         if: always()
