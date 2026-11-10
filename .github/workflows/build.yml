@@ -41,28 +41,41 @@ jobs:
 
       - name: Clone Kernel Source
         run: |
-          git clone --depth=500 -b android16-aptusitu https://gitlab.com/kaixenberg/android_kernel_xiaomi_sm8250.git kernel
+          git clone --depth=1 -b android16-aptusitu https://gitlab.com/kaixenberg/android_kernel_xiaomi_sm8250.git kernel
 
-      - name: Upgrade CIP Base (try cip136)
+      - name: Upgrade CIP Base to cip136 (patch-based)
         run: |
           cd kernel
-          git remote add cip https://git.kernel.org/pub/scm/linux/kernel/git/cip/linux-cip.git 2>/dev/null || true
-          echo "=== fetch cip136 with history ==="
-          timeout 300 git fetch --depth=500 cip refs/tags/v4.19.325-cip136:refs/tags/cip136-target 2>&1 | tail -5 || { echo "FETCH_FAILED"; exit 1; }
-          echo "=== ancestor check ==="
-          git merge-base --is-ancestor cip136-target HEAD 2>/dev/null && echo "already-ancestor" || echo "need-merge"
-          echo "=== merge ==="
-          git -c user.email="ci@local" -c user.name="ci" merge --no-commit --no-ff cip136-target 2>&1 | tail -20
-          rc=$?
-          echo "=== conflict check ==="
-          if git status --short | grep -qE "^UU|^AA|^DU|^UD"; then
-            echo "CONFLICT_FILES:"
-            git status --short | grep -E "^UU|^AA|^DU|^UD" | head -40
-            echo "CIP_MERGE_RESULT=CONFLICT"
-            git merge --abort || true
-            exit 1
-          fi
-          echo "CIP_MERGE_RESULT=OK"
+          echo "=== baseline ==="
+          grep -m1 SUBLEVEL Makefile
+          echo "localversion-cip=$(cat localversion-cip 2>/dev/null) localversion-st=$(cat localversion-st 2>/dev/null)"
+          BASE="https://mirrors.tuna.tsinghua.edu.cn/kernel/projects/cip/4.19"
+          echo "=== download cip127 + cip136 ==="
+          curl -sL --retry 3 -o /tmp/cip127.tar.xz "$BASE/linux-cip-4.19.325-cip127.tar.xz" || { echo "DL_127_FAIL"; exit 1; }
+          curl -sL --retry 3 -o /tmp/cip136.tar.xz "$BASE/linux-cip-4.19.325-cip136.tar.xz" || { echo "DL_136_FAIL"; exit 1; }
+          xz -t /tmp/cip127.tar.xz || { echo "XZ_127_BAD"; exit 1; }
+          xz -t /tmp/cip136.tar.xz || { echo "XZ_136_BAD"; exit 1; }
+          echo "sizes: $(stat -c%s /tmp/cip127.tar.xz) / $(stat -c%s /tmp/cip136.tar.xz)"
+          echo "=== extract ==="
+          mkdir -p /tmp/cipx && cd /tmp/cipx
+          tar -xJf /tmp/cip127.tar.xz || exit 1
+          tar -xJf /tmp/cip136.tar.xz || exit 1
+          echo "=== diff ==="
+          diff -urN linux-cip-4.19.325-cip127 linux-cip-4.19.325-cip136 > /tmp/cip127-136.patch 2>/dev/null || true
+          echo "patch bytes=$(stat -c%s /tmp/cip127-136.patch) files=$(grep -c '^--- ' /tmp/cip127-136.patch)"
+          echo "=== apply ==="
+          cd "$GITHUB_WORKSPACE/kernel"
+          patch -p1 --fuzz=3 -N --no-backup-if-mismatch --reject-file=- < /tmp/cip127-136.patch > /tmp/cipapply.log 2>&1 || true
+          awk '/^checking file /{f=$3} /^Hunk .*FAILED/{if(f)print f}' /tmp/cipapply.log | sort -u > /tmp/cipfail.txt
+          echo "--- failed files ---"
+          cat /tmp/cipfail.txt
+          FC=$(wc -l < /tmp/cipfail.txt)
+          echo "CIP_FAIL_COUNT=$FC"
+          if [ "$FC" -gt 30 ]; then echo "CIP_PATCH_RESULT=FAIL"; exit 1; fi
+          echo "=== stamp version ==="
+          echo "-cip136" > localversion-cip
+          echo "-st20" > localversion-st
+          echo "CIP_PATCH_RESULT=OK"
 
       - name: Clone Submodules
         run: |
