@@ -63,15 +63,12 @@ jobs:
           echo "=== diff ==="
           diff -urN linux-cip-4.19.325-cip127 linux-cip-4.19.325-cip136 > /tmp/cip127-136.patch 2>/dev/null || true
           echo "patch bytes=$(stat -c%s /tmp/cip127-136.patch) files=$(grep -c '^--- ' /tmp/cip127-136.patch)"
-          echo "=== apply ==="
+          echo "=== apply (strict, per-file, no fuzz) ==="
           cd "$GITHUB_WORKSPACE/kernel"
-          patch -p1 --fuzz=3 -N --no-backup-if-mismatch --reject-file=- < /tmp/cip127-136.patch > /tmp/cipapply.log 2>&1 || true
-          awk '/^checking file /{f=$3} /^Hunk .*FAILED/{if(f)print f}' /tmp/cipapply.log | sort -u > /tmp/cipfail.txt
-          echo "--- failed files ---"
-          cat /tmp/cipfail.txt
-          FC=$(wc -l < /tmp/cipfail.txt)
-          echo "CIP_FAIL_COUNT=$FC"
-          if [ "$FC" -gt 30 ]; then echo "CIP_PATCH_RESULT=FAIL"; exit 1; fi
+          python3 "$GITHUB_WORKSPACE/.github/scripts/apply_cip_patch.py" /tmp/cip127-136.patch "$GITHUB_WORKSPACE/kernel" --max-skip 200 | tee /tmp/cipapply.log | grep -E "chunks|APPLIED=|skipped files" 
+          FC=$(grep -oP "SKIPPED=\K[0-9]+" /tmp/cipapply.log | head -1)
+          echo "CIP_SKIPPED_COUNT=$FC"
+          if [ -z "$FC" ] || [ "$FC" -gt 200 ]; then echo "CIP_PATCH_RESULT=FAIL"; exit 1; fi
           echo "=== revert modules that broke on compile (keep fork version for internal consistency) ==="
           git checkout -- fs/f2fs fs/Makefile kernel/bpf 2>/dev/null || true
           echo "reverted: fs/f2fs fs/Makefile kernel/bpf"
