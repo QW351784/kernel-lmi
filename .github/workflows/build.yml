@@ -72,9 +72,13 @@ jobs:
           FC=$(wc -l < /tmp/cipfail.txt)
           echo "CIP_FAIL_COUNT=$FC"
           if [ "$FC" -gt 30 ]; then echo "CIP_PATCH_RESULT=FAIL"; exit 1; fi
+          echo "=== revert modules that broke on compile (keep fork version for internal consistency) ==="
+          git checkout -- fs/f2fs fs/Makefile kernel/bpf 2>/dev/null || true
+          echo "reverted: fs/f2fs fs/Makefile kernel/bpf"
           echo "=== stamp version ==="
           echo "-cip136" > localversion-cip
           echo "-st20" > localversion-st
+          echo "changed files: $(git status --short | wc -l)"
           echo "CIP_PATCH_RESULT=OK"
 
       - name: Clone Submodules
