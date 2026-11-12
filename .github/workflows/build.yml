@@ -1,4 +1,4 @@
-name: Build Kernel - lmi
+name: Build Kernel - lmi CIP136
 
 on:
   workflow_dispatch:
@@ -11,11 +11,10 @@ on:
         options:
           - miui
           - aosp
-          - both
       lto:
         description: 'LTO mode'
         required: false
-        default: 'none'
+        default: 'thin'
         type: choice
         options:
           - none
@@ -28,182 +27,126 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      DEVICE: lmi
+      KERNEL_NAME: Nidhi-1.2.5
+      VARIANT: ${{ inputs.rom }}
+      LTO_MODE: ${{ inputs.lto }}
+      JOBS: 4
     steps:
       - name: Checkout CI
         uses: actions/checkout@v4
 
       - name: Cleanup Disk Space
         run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
 
-      - name: Clone Kernel Source
+      - name: Clone Kernel (upstream nidhi, cip136)
         run: |
-          git clone --depth=1 -b android16-aptusitu https://gitlab.com/kaixenberg/android_kernel_xiaomi_sm8250.git kernel
-
-      - name: Upgrade CIP Base to cip136 (patch-based)
-        run: |
+          git clone --recurse-submodules --shallow-submodules --depth=1 -b nidhi \
+            https://github.com/kaixenberg/kernel_xiaomi_sm8250.git kernel
           cd kernel
           echo "=== baseline ==="
+          echo "localversion-cip=[$(cat localversion-cip)] localversion-st=[$(cat localversion-st)]"
           grep -m1 SUBLEVEL Makefile
-          echo "localversion-cip=$(cat localversion-cip 2>/dev/null) localversion-st=$(cat localversion-st 2>/dev/null)"
-          BASE="https://mirrors.tuna.tsinghua.edu.cn/kernel/projects/cip/4.19"
-          echo "=== download cip127 + cip136 ==="
-          curl -sL --retry 3 -o /tmp/cip127.tar.xz "$BASE/linux-cip-4.19.325-cip127.tar.xz" || { echo "DL_127_FAIL"; exit 1; }
-          curl -sL --retry 3 -o /tmp/cip136.tar.xz "$BASE/linux-cip-4.19.325-cip136.tar.xz" || { echo "DL_136_FAIL"; exit 1; }
-          xz -t /tmp/cip127.tar.xz || { echo "XZ_127_BAD"; exit 1; }
-          xz -t /tmp/cip136.tar.xz || { echo "XZ_136_BAD"; exit 1; }
-          echo "sizes: $(stat -c%s /tmp/cip127.tar.xz) / $(stat -c%s /tmp/cip136.tar.xz)"
-          echo "=== extract ==="
-          mkdir -p /tmp/cipx && cd /tmp/cipx
-          tar -xJf /tmp/cip127.tar.xz || exit 1
-          tar -xJf /tmp/cip136.tar.xz || exit 1
-          echo "=== diff ==="
-          diff -urN linux-cip-4.19.325-cip127 linux-cip-4.19.325-cip136 > /tmp/cip127-136.patch 2>/dev/null || true
-          echo "patch bytes=$(stat -c%s /tmp/cip127-136.patch) files=$(grep -c '^--- ' /tmp/cip127-136.patch)"
-          echo "=== apply (strict, per-file, no fuzz) ==="
-          cd "$GITHUB_WORKSPACE/kernel"
-          python3 "$GITHUB_WORKSPACE/.github/scripts/apply_cip_patch.py" /tmp/cip127-136.patch "$GITHUB_WORKSPACE/kernel" --max-skip 200 | tee /tmp/cipapply.log | grep -E "chunks|APPLIED=|skipped files" 
-          FC=$(grep -oP "SKIPPED=\K[0-9]+" /tmp/cipapply.log | head -1)
-          echo "CIP_SKIPPED_COUNT=$FC"
-          if [ -z "$FC" ] || [ "$FC" -gt 200 ]; then echo "CIP_PATCH_RESULT=FAIL"; exit 1; fi
-          echo "=== revert modules that broke on compile (keep fork version for internal consistency) ==="
-          git checkout -- fs/f2fs fs/Makefile kernel/bpf 2>/dev/null || true
-          echo "reverted: fs/f2fs fs/Makefile kernel/bpf"
-          echo "=== stamp version ==="
-          echo "-cip136" > localversion-cip
-          echo "-st20" > localversion-st
-          echo "changed files: $(git status --short | wc -l)"
-          echo "CIP_PATCH_RESULT=OK"
-
-      - name: Clone Submodules
-        run: |
-          git clone --depth=1 -b v4.2.0-rc3 https://github.com/Baka-SU/BakaSU.git bakasu
-          ln -sfn $PWD/bakasu/kernel kernel/drivers/kernelsu
-          git clone --depth=1 https://github.com/vc-teahouse/Baseband-guard.git kbg
-          ln -sfn $PWD/kbg kernel/security/baseband-guard
-          rm -rf kernel/anykernel
-          git clone --depth=1 -b kona https://github.com/liyafe1997/AnyKernel3.git kernel/anykernel
-          echo "--- verify ---"
-          ls kernel/drivers/kernelsu/Kconfig kernel/security/baseband-guard/Kconfig
-          ls kernel/anykernel/anykernel.sh kernel/anykernel/META-INF
-          grep -n "device.name5" kernel/anykernel/anykernel.sh
+          ls arch/arm64/configs/vendor/xiaomi/lmi.config arch/arm64/configs/lmi_defconfig
+          ls KernelSU/Kbuild AnyKernel3/anykernel.sh
 
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3 libxml2-utils
-          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+          sudo apt-get install -y build-essential git curl wget bison flex zip bc cpio \
+            libssl-dev ccache python-is-python3 libxml2-utils lz4 zstd \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
       - name: Fix libxml2 for ld.lld
         run: |
-          # runner 系统提供的是 libxml2.so.16，工具链 ld.lld 需要老的 .so.2
           LIBXML=$(ldconfig -p | grep -oP 'libxml2\.so\.\K[0-9]+' | head -1 || true)
           echo "system libxml2 soname: $LIBXML"
           if [ -n "$LIBXML" ] && [ "$LIBXML" != "2" ]; then
             sudo ln -sf /usr/lib/x86_64-linux-gnu/libxml2.so.$LIBXML /usr/lib/x86_64-linux-gnu/libxml2.so.2
             sudo ldconfig
           fi
-          echo "--- verify ---"
           ldconfig -p | grep "libxml2.so.2" || echo "STILL MISSING"
 
-
-      - name: Setup Toolchain
+      - name: Setup Toolchain (Neutron clang24)
         run: |
-          sudo apt-get install -y zstd || true
-          mkdir -p $HOME/zyc-clang
-          cd $HOME/zyc-clang
-          wget -q https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/06092026/neutron-clang-06092026.tar.zst
-          tar --zstd -xf neutron-clang-06092026.tar.zst || (echo "tar --zstd failed, trying zstd -d" && zstd -d -c neutron-clang-06092026.tar.zst | tar -x)
-          echo "--- layout check ---"
-          CLANG_BIN=$(find $HOME/zyc-clang -maxdepth 3 -type f -name "clang" | head -1)
-          echo "clang at: $CLANG_BIN"
-          if [ -n "$CLANG_BIN" ] && [ "$CLANG_BIN" != "$HOME/zyc-clang/bin/clang" ]; then
-            CLANG_DIR=$(dirname "$CLANG_BIN")
-            rm -rf $HOME/zyc-clang/bin
-            ln -sfn "$CLANG_DIR" $HOME/zyc-clang/bin
-          fi
-          ls -la $HOME/zyc-clang/bin/clang || (echo "final fallback search" && find $HOME/zyc-clang -maxdepth 4 -name "clang*" -type f | head -5)
-          $HOME/zyc-clang/bin/clang --version || true
+          mkdir -p $HOME/zyc-clang && cd $HOME/zyc-clang
+          curl -sL -A "Mozilla/5.0" -o neutron.tar.zst \
+            https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/06092026/neutron-clang-06092026.tar.zst
+          ls -la neutron.tar.zst
+          tar --zstd -xf neutron.tar.zst || (zstd -d -c neutron.tar.zst | tar -x)
+          BIN=$(find $HOME/zyc-clang -type f -name clang -perm -u+x | head -1 | xargs -r dirname)
+          echo "clang bin: $BIN"
+          echo "CLANG_DIR=$(dirname "$BIN")" >> $GITHUB_ENV
+          "$BIN/clang" --version | head -2
 
-      - name: Apply Custom Optimizations
+      - name: Prepare Build Switches
+        working-directory: kernel
         run: |
-          python3 .github/scripts/patch_build.py kernel/build.sh
-          grep -n "custom perf opts" kernel/build.sh
-
-      - name: Apply BakaSU Hook Patch
-        run: |
-          python3 .github/scripts/patch_hooks.py kernel
-          echo "--- verify ---"
-          grep -c "ksu_vfs_read_hook" kernel/fs/read_write.c || echo "clean"
-          grep -n "ksu_handle_newfstat_ret" kernel/fs/stat.c | head -2
-
-      - name: Apply clang21 Compatibility Patch
-        run: |
-          python3 .github/scripts/patch_clang21.py kernel
-          echo "--- verify ---"
-          grep -n "PAGE_SIZE" kernel/drivers/xiaomi/cpu_pcost.c | head -4
-          grep -n "(QDF_STATUS)A_ERROR" kernel/drivers/staging/qca-wifi-host-cmn/hif/src/ce/ce_main.c | head -2
-
-      - name: Apply Conservative Scheduler Tuning
-        run: |
-          python3 .github/scripts/patch_sched_conservative.py kernel
-          echo "--- verify scheduler values ---"
-          grep -n "sysctl_sched_latency\s*=\|sysctl_sched_min_granularity\s*=\|sysctl_sched_wakeup_granularity\s*=" kernel/kernel/sched/fair.c | head -6
+          sed -i 's|    pipa) NAMES="pipa" ;;|    pipa) NAMES="pipa" ;;\n    lmi) NAMES="lmi" ;;|' build.sh
+          grep -n "lmi) NAMES" build.sh
+          DEF=arch/arm64/configs/lmi_defconfig
+          case "$LTO_MODE" in
+            thin)
+              sed -i '/^CONFIG_THINLTO=y/d' $DEF
+              echo "CONFIG_THINLTO=y" >> $DEF
+              ;;
+            none)
+              sed -i 's/^CONFIG_LTO_CLANG=y/# CONFIG_LTO_CLANG is not set/' $DEF
+              sed -i 's/^CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/' $DEF
+              sed -i 's/^CONFIG_SHADOW_CALL_STACK=y/# CONFIG_SHADOW_CALL_STACK is not set/' $DEF
+              sed -i '/^CONFIG_LTO_NONE=y/d' $DEF
+              echo "CONFIG_LTO_NONE=y" >> $DEF
+              ;;
+            full)
+              sed -i '/^CONFIG_THINLTO=y/d' $DEF
+              ;;
+          esac
+          echo "=== LTO lines in defconfig ==="
+          grep -nE '^CONFIG_(LTO_CLANG|THINLTO|LTO_NONE|CFI_CLANG)=' $DEF || true
+          echo "=== KSU line ==="
+          grep -n "CONFIG_KSU=" arch/arm64/configs/vendor/xiaomi/magictime-common.config
 
       - name: Build Kernel
+        working-directory: kernel
         run: |
-          cd kernel
-          chmod +x build.sh
-          if [ "${{ inputs.rom }}" = "both" ]; then
-            echo "building both AOSP + MIUI"
-            bash build.sh lmi ksu
-          elif [ "${{ inputs.lto }}" = "full" ]; then
-            echo "full LTO: limiting jobs to 1 to reduce memory pressure"
-            bash build.sh lmi ksu "${{ inputs.rom }}" -L full -J1
-          else
-            bash build.sh lmi ksu "${{ inputs.rom }}" -L ${{ inputs.lto }}
-          fi
+          set -o pipefail
+          ./build.sh 2>&1 | tail -80
 
-      - name: Verify Kernel Config
-        if: always()
+      - name: Verify Artifacts
+        working-directory: kernel
         run: |
-          echo "=== out/.config 关键项 ==="
-          for k in CONFIG_KSU CONFIG_KSU_MANUAL_HOOK CONFIG_SECURITY_YAMA CONFIG_SECURITY_DMESG_RESTRICT CONFIG_FORTIFY_SOURCE CONFIG_SCHEDSTATS CONFIG_SCHED_INFO CONFIG_DEBUG_KERNEL CONFIG_SCHED_DEBUG CONFIG_PROFILING CONFIG_LOCKDEP CONFIG_DEBUG_INFO CONFIG_KALLSYMS_ALL CONFIG_LOCALVERSION CONFIG_LTO CONFIG_CFI_CLANG; do
-            printf "%-38s : %s\n" "$k" "$(grep -E "^${k}(=| is not set)" kernel/out/.config 2>/dev/null | head -1)"
-          done
-          echo "=== Image 版本串 ==="
-          strings kernel/out/arch/arm64/boot/Image 2>/dev/null | grep -m1 "Linux version"
-          echo "=== LTO thin 强校验（4.19 真名 CONFIG_THINLTO）==="
-          grep -E "^CONFIG_THINLTO=y$|^CONFIG_LTO_NONE=y$" kernel/out/.config
-          echo "=== Image 内嵌配置（真实）==="
-          cp kernel/scripts/extract-ikconfig /tmp/eik 2>/dev/null; chmod +x /tmp/eik
-          /tmp/eik kernel/out/arch/arm64/boot/Image 2>/dev/null | grep -E "^CONFIG_(LTO_CLANG_THIN|LTO_NONE|KSU|LOCALVERSION|SCHED_DEBUG|SCHEDSTATS|PROFILING)" | head -12
-          echo "=== 归档 .config 供下载 ==="
-          mkdir -p kernel/out/artifacts && cp kernel/out/.config kernel/out/artifacts/build.config && ls -lh kernel/out/artifacts/
-
-      - name: Locate Artifacts
-        if: always()
-        run: |
-          echo "=== zip 文件 ==="
-          find . -name "*.zip" -not -path "*/.git/*" | head -20
-          echo "=== out/lmi ==="
-          ls -la kernel/out/lmi/ 2>/dev/null || echo "no kernel/out/lmi"
+          set -e
+          REL=$(cat out/include/config/kernel.release)
+          echo "RELEASE=$REL"
+          case "$REL" in
+            *cip136*) echo "CIP136_PRESENT";;
+            *) echo "CIP136_MISSING"; exit 1;;
+          esac
+          echo "=== config proof ==="
+          grep -E '^CONFIG_(LTO_CLANG|THINLTO|LTO_NONE|CFI_CLANG|KSU|KSU_MANUAL_HOOK|LOCALVERSION)=' out/.config || true
+          echo "=== zip ==="
+          ZIP=$(ls out/*.zip | head -1)
+          echo "ZIP=$ZIP"
+          unzip -t "$ZIP" | tail -2
+          unzip -l "$ZIP" | head -12
+          echo "=== image ==="
+          ls -la out/arch/arm64/boot/Image out/arch/arm64/boot/dtbo.img out/ak3/kernels/Image 2>/dev/null || true
+          sha256sum out/arch/arm64/boot/Image
+          echo "=== anykernel device names ==="
+          grep -E '^(device\.name|kernel\.string)' out/ak3/anykernel.sh
 
       - name: Publish Release
-        if: always()
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: build-${{ github.run_number }}
-          name: Kernel lmi ${{ inputs.rom }} #${{ github.run_number }}
-          body: |
-            rom: ${{ inputs.rom }}
-            run: ${{ github.run_number }}
-          files: |
-            kernel/out/**/*.zip
-            kernel/anykernel/*.zip
-            **/*.zip
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd kernel
+          ZIP=$(ls out/*.zip | head -1)
+          REL=$(cat out/include/config/kernel.release)
+          TAG="build-cip136-$(date -u +%m%d%H%M)"
+          gh release create "$TAG" "$ZIP" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG lmi cip136" \
+            --notes "uname: $REL / device: lmi / variant: $VARIANT / lto: $LTO_MODE / toolchain: Neutron clang 24.0.0git"
