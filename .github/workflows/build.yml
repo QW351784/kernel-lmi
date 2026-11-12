@@ -1,4 +1,4 @@
-name: Build Kernel - lmi CIP136
+name: Build Kernel - lmi CIP136 v2-Opt
 
 on:
   workflow_dispatch:
@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 300
     env:
       DEVICE: lmi
-      KERNEL_NAME: Nidhi-1.2.5
+      KERNEL_NAME: Nidhi-1.3.0
       VARIANT: ${{ inputs.rom }}
       LTO_MODE: ${{ inputs.lto }}
       JOBS: 4
@@ -57,6 +57,42 @@ jobs:
           echo "=== KSU pieces ==="
           ls -d KernelSU/kernel AnyKernel3/anykernel.sh 2>/dev/null || true
           grep -m1 'CONFIG_KSU=y' arch/arm64/configs/vendor/xiaomi/magictime-common.config || true
+
+      - name: Switch KernelSU to SukiSU-Ultra
+        working-directory: kernel
+        run: |
+          set -e
+          rm -rf KernelSU
+          git clone --depth=1 https://github.com/SukiSU-Ultra/SukiSU-Ultra.git KernelSU
+          cd KernelSU
+          echo "=== Ultra HEAD ==="
+          git log -1 --format='%h %s'
+          echo "=== uapi version ==="
+          grep -n "KERNEL_SU_UAPI_VERSION" uapi/supercall.h | head -3
+          echo "=== kernel entry files ==="
+          ls kernel/Kconfig kernel/Makefile
+          echo "=== KPM option present? ==="
+          grep -n "config KPM" kernel/Kconfig
+          echo "=== symlink intact? ==="
+          ls -la ../drivers/kernelsu
+
+      - name: Apply Kernel Tweaks (10 items)
+        working-directory: kernel
+        run: |
+          set -e
+          python3 "$GITHUB_WORKSPACE/patch_kernel.py"
+          echo "=== 改后逐项抽查 ==="
+          grep -n "= 600000ULL" kernel/sched/fair.c | head -2
+          grep -n "PLACE_REL_DEADLINE, false" kernel/sched/features.h
+          grep -n "RUN_TO_PARITY, false" kernel/sched/features.h
+          grep -n "input_boost_ms = 120" drivers/cpufreq/cpu-boost.c
+          grep -n "input_boost_freq = (cpu < 4)" drivers/cpufreq/cpu-boost.c
+          grep -n "CONFIG_PANIC_TIMEOUT=5" arch/arm64/configs/lmi_defconfig
+          grep -n "CONFIG_FORTIFY_SOURCE=y" arch/arm64/configs/lmi_defconfig
+          grep -n "CONFIG_KPM=y" arch/arm64/configs/lmi_defconfig
+          grep -n "KSU_SUSFS_ENABLE_LOG" arch/arm64/configs/vendor/xiaomi/magictime-common.config
+          grep -n "thermal-mitigation = <3100000" arch/arm64/boot/dts/vendor/xiaomi/lmi-sm8250.dtsi
+          grep -n "mi,pd-power-max = <36>" arch/arm64/boot/dts/vendor/xiaomi/lmi-sm8250.dtsi
 
       - name: Install Dependencies
         run: |
@@ -149,6 +185,10 @@ jobs:
           esac
           echo "=== config proof ==="
           grep -E '^CONFIG_(LTO_CLANG|THINLTO|LTO_NONE|CFI_CLANG|KSU|KSU_MANUAL_HOOK|LOCALVERSION)=' out/.config || true
+          echo "=== v2 优化项核验 ==="
+          grep -E '^CONFIG_(KPM|KALLSYMS_ALL|FORTIFY_SOURCE|PANIC_TIMEOUT|KSU_SUSFS|KSU_SUSFS_ENABLE_LOG)=' out/.config || echo "(未全部出现)"
+          echo "=== KSU 版本 ==="
+          grep -ohs -- '-DKSU_VERSION=[0-9]*' out/drivers/kernelsu/.*.cmd out/drivers/kernelsu/*/.*.cmd 2>/dev/null | head -1 || echo "(未取到)"
           echo "=== zip ==="
           ZIP=$(ls out/*.zip | head -1)
           echo "ZIP=$ZIP"
