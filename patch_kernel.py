@@ -26,6 +26,13 @@ def sub(path, old, new, expect=None, label=""):
         f.write(s.replace(old, new))
     OK.append(f"[{label}] {path} ({n}处)")
 
+def sub_optional(path, old, new, expect=None, label=""):
+    """文件不存在则跳过（用于仅 Ultra 源码才有的文件）"""
+    if not pathlib.Path(path).exists():
+        OK.append(f"[{label}] 跳过：{path} 不存在（非 Ultra 环境）")
+        return
+    sub(path, old, new, expect=expect, label=label)
+
 def add_config(path, line, label=""):
     p = pathlib.Path(path)
     if not p.exists():
@@ -109,6 +116,14 @@ else:
         with open(dts, 'w', newline='') as f:
             f.write(s)
         OK.append("[10-dcp] 前9档 1800000 -> 2000000")
+
+# ---------- 11. Ultra 兼容 4.19：MODULE_IMPORT_NS 宏不存在 ----------
+# 4.19 没有符号命名空间机制，MODULE_IMPORT_NS 未定义，
+# clang 会把它当隐式函数声明直接报 -Wimplicit-int 错误。
+sub_optional("drivers/kernelsu/core/init.c",
+             "MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);",
+             "/* MODULE_IMPORT_NS: unavailable on 4.19, removed */",
+             expect=1, label="11-MODULE_IMPORT_NS")
 
 print("=" * 60)
 for k in OK: print("OK  ", k)
