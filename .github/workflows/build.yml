@@ -88,8 +88,8 @@ jobs:
           grep -n "input_boost_ms = 120" drivers/cpufreq/cpu-boost.c
           grep -n "input_boost_freq = (cpu < 4)" drivers/cpufreq/cpu-boost.c
           grep -n "CONFIG_PANIC_TIMEOUT=5" arch/arm64/configs/lmi_defconfig
-          grep -n "CONFIG_FORTIFY_SOURCE=y" arch/arm64/configs/lmi_defconfig
           grep -n "CONFIG_KPM=y" arch/arm64/configs/lmi_defconfig
+          grep -n "CONFIG_KPROBES=y" arch/arm64/configs/vendor/xiaomi/magictime-common.config
           grep -n "KSU_SUSFS_ENABLE_LOG" arch/arm64/configs/vendor/xiaomi/magictime-common.config
           grep -n "thermal-mitigation = <3100000" arch/arm64/boot/dts/vendor/xiaomi/lmi-sm8250.dtsi
           grep -n "mi,pd-power-max = <36>" arch/arm64/boot/dts/vendor/xiaomi/lmi-sm8250.dtsi
