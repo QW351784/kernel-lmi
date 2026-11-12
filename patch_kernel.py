@@ -161,6 +161,29 @@ else:
         OK.append(f"[{label}] ok")
     fwp.write_text(s)
 
+# ---------- 13. Ultra seccomp_cache.c 兼容 4.19 ----------
+# 4.19 没有 seccomp cache(5.9+)，保留符号为空实现，避免 setuid_hook 链接失败
+scp = pathlib.Path("drivers/kernelsu/infra/seccomp_cache.c")
+if not scp.exists():
+    OK.append("[13-seccomp] 跳过：文件不存在（非 Ultra 环境）")
+else:
+    s2 = scp.read_text()
+    inc = '#include "infra/seccomp_cache.h"'
+    if s2.count(inc) == 1:
+        s2 = s2.replace(inc, inc + """
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+/* 4.19: no seccomp cache support; keep the symbols as no-ops */
+void ksu_seccomp_clear_cache(struct seccomp_filter *filter, int nr) { (void)filter; (void)nr; }
+void ksu_seccomp_allow_cache(struct seccomp_filter *filter, int nr) { (void)filter; (void)nr; }
+#else""", 1)
+        s2 = s2.rstrip("\n") + "\n\n#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0) */\n"
+        scp.write_text(s2)
+        OK.append("[13-seccomp] 4.19 下改为空实现")
+    else:
+        FAIL.append(f"[13-seccomp] include 未命中: {s2.count(inc)}")
+
+
 print("=" * 60)
 for k in OK: print("OK  ", k)
 for f in FAIL: print("FAIL", f)
