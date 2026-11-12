@@ -125,6 +125,42 @@ sub_optional("drivers/kernelsu/core/init.c",
              "/* MODULE_IMPORT_NS: unavailable on 4.19, removed */",
              expect=1, label="11-MODULE_IMPORT_NS")
 
+# ---------- 12. Ultra file_wrapper.c 兼容 4.19 ----------
+# 4.19 的 struct file_operations 没有 iopoll(5.1+) / remap_file_range(4.20+)
+fwp = pathlib.Path("drivers/kernelsu/infra/file_wrapper.c")
+if not fwp.exists():
+    OK.append("[12-file_wrapper] 跳过：文件不存在（非 Ultra 环境）")
+else:
+    s = fwp.read_text()
+    pairs = [
+        ("12A-iopoll-head",
+         "#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)\nstatic int ksu_wrapper_iopoll",
+         "#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)\n#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)\nstatic int ksu_wrapper_iopoll"),
+        ("12B-iopoll-tail",
+         "    return orig->f_op->iopoll(kiocb, spin);\n}\n#endif\n\n#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)",
+         "    return orig->f_op->iopoll(kiocb, spin);\n}\n#endif\n#endif  /* iopoll: >= 5.1.0 only */\n\n#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)"),
+        ("12C-iopoll-assign",
+         "    p->ops.iopoll = fp->f_op->iopoll ? ksu_wrapper_iopoll : NULL;\n",
+         "#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)\n    p->ops.iopoll = fp->f_op->iopoll ? ksu_wrapper_iopoll : NULL;\n#endif\n"),
+        ("12D-remap-head",
+         "static loff_t ksu_wrapper_remap_file_range(",
+         "#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)\nstatic loff_t ksu_wrapper_remap_file_range("),
+        ("12E-remap-tail",
+         "        return orig->f_op->remap_file_range(orig, pos_in, file_out, pos_out, len, remap_flags);\n    }\n}\n",
+         "        return orig->f_op->remap_file_range(orig, pos_in, file_out, pos_out, len, remap_flags);\n    }\n}\n#endif  /* remap_file_range: >= 4.20 only */\n"),
+        ("12F-remap-assign",
+         "    p->ops.remap_file_range = fp->f_op->remap_file_range ? ksu_wrapper_remap_file_range : NULL;\n",
+         "#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)\n    p->ops.remap_file_range = fp->f_op->remap_file_range ? ksu_wrapper_remap_file_range : NULL;\n#endif\n"),
+    ]
+    for label, old, new in pairs:
+        n = s.count(old)
+        if n != 1:
+            FAIL.append(f"[{label}] 命中数异常: {n}")
+            continue
+        s = s.replace(old, new)
+        OK.append(f"[{label}] ok")
+    fwp.write_text(s)
+
 print("=" * 60)
 for k in OK: print("OK  ", k)
 for f in FAIL: print("FAIL", f)
