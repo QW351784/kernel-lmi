@@ -172,13 +172,22 @@ jobs:
         run: |
           set -o pipefail
           ./build.sh > /tmp/build_all.log 2>&1 || {
-            echo "########## BUILD FAILED — error lines ##########"
-            grep -n -B4 -A10 -i "error:\|fatal error\|undefined reference" /tmp/build_all.log | tail -150
-            echo "########## last 50 lines ##########"
-            tail -50 /tmp/build_all.log
+            echo "########## tail 40 ##########"
+            tail -40 /tmp/build_all.log
+            echo "########## ERRORS (last block, keep at output end) ##########"
+            grep -n -B3 -A8 -i "error:" /tmp/build_all.log | tail -80 || echo "(no error: line found)"
+            echo "########## END ##########"
             exit 1
           }
           tail -60 /tmp/build_all.log
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-fail
+          path: /tmp/build_all.log
+          retention-days: 3
 
       - name: Verify Artifacts
         working-directory: kernel
