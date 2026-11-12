@@ -49,10 +49,14 @@ jobs:
           cd kernel
           echo "=== baseline ==="
           echo "localversion-cip=[$(cat localversion-cip)] localversion-st=[$(cat localversion-st)]"
-          grep -m1 SUBLEVEL Makefile
-          ls arch/arm64/configs/vendor/xiaomi/lmi.config arch/arm64/configs/lmi_defconfig
-          ls KernelSU/kernel/Kbuild AnyKernel3/anykernel.sh
-          grep -m1 'CONFIG_KSU=y' arch/arm64/configs/vendor/xiaomi/magictime-common.config
+          grep -m1 SUBLEVEL Makefile || true
+          echo "=== submodules ==="
+          git submodule status || true
+          echo "=== lmi configs ==="
+          ls -d arch/arm64/configs/vendor/xiaomi/lmi.config arch/arm64/configs/lmi_defconfig || true
+          echo "=== KSU pieces ==="
+          ls -d KernelSU/kernel AnyKernel3/anykernel.sh 2>/dev/null || true
+          grep -m1 'CONFIG_KSU=y' arch/arm64/configs/vendor/xiaomi/magictime-common.config || true
 
       - name: Install Dependencies
         run: |
