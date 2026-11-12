@@ -184,6 +184,21 @@ void ksu_seccomp_allow_cache(struct seccomp_filter *filter, int nr) { (void)filt
         FAIL.append(f"[13-seccomp] include 未命中: {s2.count(inc)}")
 
 
+# ---------- 14. Ultra su_mount_ns.c 兼容 4.19 ----------
+# 4.19 没有 uapi/linux/mount.h（5.x 才拆出），MS_* 常量在 uapi/linux/fs.h（已被 linux/fs.h 包含）
+smp = pathlib.Path("drivers/kernelsu/infra/su_mount_ns.c")
+if not smp.exists():
+    OK.append("[14-mount] 跳过：文件不存在（非 Ultra 环境）")
+else:
+    s3 = smp.read_text()
+    old = "#include <uapi/linux/mount.h>"
+    if s3.count(old) == 1:
+        s3 = s3.replace(old, "/* uapi/linux/mount.h: absent on 4.19; MS_* comes from linux/fs.h */")
+        smp.write_text(s3)
+        OK.append("[14-mount] 移除 uapi/linux/mount.h 包含")
+    else:
+        FAIL.append(f"[14-mount] 命中数异常: {s3.count(old)}")
+
 print("=" * 60)
 for k in OK: print("OK  ", k)
 for f in FAIL: print("FAIL", f)
