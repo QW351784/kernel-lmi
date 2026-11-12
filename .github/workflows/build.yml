@@ -82,14 +82,15 @@ jobs:
             https://github.com/Neutron-Toolchains/clang-build-catalogue/releases/download/06092026/neutron-clang-06092026.tar.zst
           ls -la neutron.tar.zst
           tar --zstd -xf neutron.tar.zst || (zstd -d -c neutron.tar.zst | tar -x)
-          CLANG_BIN=$(find $HOME/zyc-clang -maxdepth 4 -type f -name clang -perm -u+x | head -1)
-          echo "clang binary: $CLANG_BIN"
-          [ -n "$CLANG_BIN" ] || { echo "clang not found in tarball"; find $HOME/zyc-clang -maxdepth 3 | head -30; exit 1; }
-          CLANG_DIR=$(dirname "$(dirname "$CLANG_BIN")")
+          CLANG_DIR=$HOME/zyc-clang
+          if [ ! -x "$CLANG_DIR/bin/clang" ]; then
+            BINDIR=$(find "$HOME/zyc-clang" -maxdepth 3 -type d -name bin | head -1)
+            [ -n "$BINDIR" ] || { echo "no bin dir after unpack"; find "$HOME/zyc-clang" -maxdepth 2 | head -20; exit 1; }
+            CLANG_DIR=$(dirname "$BINDIR")
+          fi
           echo "CLANG_DIR=$CLANG_DIR"
-          [ -x "$CLANG_DIR/bin/clang" ] || { echo "unexpected layout: no $CLANG_DIR/bin/clang"; find $HOME/zyc-clang -maxdepth 3 | head -30; exit 1; }
+          [ -x "$CLANG_DIR/bin/clang" ] || { echo "unexpected layout: no $CLANG_DIR/bin/clang"; ls -la "$CLANG_DIR" | head -20; exit 1; }
           [ -x "$CLANG_DIR/bin/ld.lld" ] || { echo "no ld.lld in $CLANG_DIR/bin"; ls "$CLANG_DIR/bin" | head -30; exit 1; }
-          ls -d "$CLANG_DIR/lib" || echo "warning: no lib dir next to bin"
           echo "CLANG_DIR=$CLANG_DIR" >> $GITHUB_ENV
           "$CLANG_DIR/bin/clang" --version | head -2
           "$CLANG_DIR/bin/ld.lld" --version
