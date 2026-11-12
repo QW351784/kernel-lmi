@@ -60,8 +60,10 @@ sub("drivers/cpufreq/cpu-boost.c",
     "\t\ts->cpu = cpu;\n\t\t/* 小核(cpu0-3)触控默认加速到 1.2GHz，其余核不 boost */\n\t\ts->input_boost_freq = (cpu < 4) ? 1200000 : 0;",
     expect=1, label="4-input_boost_freq")
 
-# ---------- 5. FORTIFY_SOURCE ----------
-add_config("arch/arm64/configs/lmi_defconfig", "CONFIG_FORTIFY_SOURCE=y", label="5-FORTIFY")
+# ---------- 5. FORTIFY_SOURCE：跳过 ----------
+# security/Kconfig 里 FORTIFY_SOURCE 有 "depends on !CC_IS_CLANG"，
+# clang 24 工具链下该项被 Kconfig 强制禁用，写进 defconfig 也会被丢弃。
+OK.append("[5-FORTIFY] 跳过：clang 工具链下 FORTIFY_SOURCE 被 Kconfig 禁用（depends on !CC_IS_CLANG）")
 
 # ---------- 6. PANIC_TIMEOUT -1 -> 5 ----------
 sub("arch/arm64/configs/lmi_defconfig", "CONFIG_PANIC_TIMEOUT=-1", "CONFIG_PANIC_TIMEOUT=5",
@@ -75,6 +77,12 @@ sub("arch/arm64/configs/vendor/xiaomi/magictime-common.config",
 
 # ---------- 8. KPM ----------
 add_config("arch/arm64/configs/lmi_defconfig", "CONFIG_KPM=y", label="8-KPM")
+
+# ---------- 8b. KPROBES：Ultra 的 config KSU 硬依赖 ----------
+# Ultra: config KSU  depends on KPROBES && EXT4_FS
+# 不开 KPROBES -> KSU 不可见 -> 整个 KernelSU/SuSFS 被 defconfig 丢弃
+add_config("arch/arm64/configs/vendor/xiaomi/magictime-common.config",
+           "CONFIG_KPROBES=y", label="8b-KPROBES")
 
 # ---------- 9. 充电满速：thermal-mitigation 首档 + pd-power-max ----------
 sub("arch/arm64/boot/dts/vendor/xiaomi/lmi-sm8250.dtsi",
