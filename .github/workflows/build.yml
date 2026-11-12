@@ -171,7 +171,14 @@ jobs:
         working-directory: kernel
         run: |
           set -o pipefail
-          ./build.sh 2>&1 | tail -100
+          ./build.sh > /tmp/build_all.log 2>&1 || {
+            echo "########## BUILD FAILED — error lines ##########"
+            grep -n -B4 -A10 -i "error:\|fatal error\|undefined reference" /tmp/build_all.log | tail -150
+            echo "########## last 50 lines ##########"
+            tail -50 /tmp/build_all.log
+            exit 1
+          }
+          tail -60 /tmp/build_all.log
 
       - name: Verify Artifacts
         working-directory: kernel
