@@ -199,6 +199,28 @@ else:
     else:
         FAIL.append(f"[14-mount] 命中数异常: {s3.count(old)}")
 
+# ---------- 15. Ultra pkg_observer.c 兼容 4.19 ----------
+# 4.19 的 struct fsnotify_ops 没有 handle_inode_event（5.x 才有）
+pkg = pathlib.Path("drivers/kernelsu/manager/pkg_observer.c")
+if not pkg.exists():
+    OK.append("[15-pkg_observer] 跳过：文件不存在（非 Ultra 环境）")
+else:
+    s4 = pkg.read_text()
+    anchor = '#include "manager/throne_tracker.h"'
+    if s4.count(anchor) == 1:
+        s4 = s4.replace(anchor, anchor + """
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+/* 4.19 fsnotify_ops has no handle_inode_event; package observer becomes no-op */
+int ksu_observer_init(void) { return 0; }
+void ksu_observer_exit(void) { }
+#else""", 1)
+        s4 = s4.rstrip("\n") + "\n\n#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0) */\n"
+        pkg.write_text(s4)
+        OK.append("[15-pkg_observer] 4.19 下改为空实现")
+    else:
+        FAIL.append(f"[15-pkg_observer] anchor 命中数异常: {s4.count(anchor)}")
+
 print("=" * 60)
 for k in OK: print("OK  ", k)
 for f in FAIL: print("FAIL", f)
