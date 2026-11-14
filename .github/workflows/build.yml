@@ -33,7 +33,7 @@ jobs:
       KERNEL_NAME: Nidhi-1.3.0
       VARIANT: ${{ inputs.rom }}
       LTO_MODE: ${{ inputs.lto }}
-      JOBS: 2
+      JOBS: 4
     steps:
       - name: Checkout CI
         uses: actions/checkout@v4

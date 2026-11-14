@@ -199,27 +199,90 @@ else:
     else:
         FAIL.append(f"[14-mount] 命中数异常: {s3.count(old)}")
 
-# ---------- 15. Ultra pkg_observer.c 兼容 4.19 ----------
-# 4.19 的 struct fsnotify_ops 没有 handle_inode_event（5.x 才有）
+# ---------- 15. Ultra pkg_observer.c 兼容 4.19（fsnotify_ops 只有 handle_event） ----------
+# 4.19 的 struct fsnotify_ops 没有 handle_inode_event（5.9 才有），但 handle_event 可用，
+# 参数不同。做一次签名适配，功能完整保留，不再降级成空实现。
 pkg = pathlib.Path("drivers/kernelsu/manager/pkg_observer.c")
 if not pkg.exists():
     OK.append("[15-pkg_observer] 跳过：文件不存在（非 Ultra 环境）")
 else:
     s4 = pkg.read_text()
-    anchor = '#include "manager/throne_tracker.h"'
-    if s4.count(anchor) == 1:
-        s4 = s4.replace(anchor, anchor + """
+    old_impl = """static int ksu_handle_inode_event(struct fsnotify_mark *mark, u32 mask, struct inode *inode, struct inode *dir,
+                                  const struct qstr *file_name, u32 cookie)
+{
+    if (!file_name)
+        return 0;
+    if (mask & FS_ISDIR)
+        return 0;
+    if (file_name->len == 13 && !memcmp(file_name->name, "packages.list", 13)) {
+        pr_info("packages.list detected: %d\\n", mask);
+        ksu_defer_track_throne();
+    }
+    return 0;
+}
+
+static const struct fsnotify_ops ksu_ops = {
+    .handle_inode_event = ksu_handle_inode_event,
+};"""
+    new_impl = """static void ksu_check_packages_list(const struct qstr *file_name, u32 mask)
+{
+    if (!file_name)
+        return;
+    if (mask & FS_ISDIR)
+        return;
+    if (file_name->len == 13 && !memcmp(file_name->name, "packages.list", 13)) {
+        pr_info("packages.list detected: %d\\n", mask);
+        ksu_defer_track_throne();
+    }
+}
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
-/* 4.19 fsnotify_ops has no handle_inode_event; package observer becomes no-op */
-int ksu_observer_init(void) { return 0; }
-void ksu_observer_exit(void) { }
-#else""", 1)
-        s4 = s4.rstrip("\n") + "\n\n#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0) */\n"
+/* 4.19: fsnotify_ops only has handle_event; adapt its signature */
+static int ksu_handle_event(struct fsnotify_group *group, struct inode *inode,
+                            struct fsnotify_mark *inode_mark,
+                            struct fsnotify_mark *vfsmount_mark,
+                            u32 mask, const void *data, int data_type,
+                            const struct qstr *file_name, u32 cookie,
+                            struct fsnotify_iter_info *iter_info)
+{
+    (void)group;
+    (void)inode;
+    (void)inode_mark;
+    (void)vfsmount_mark;
+    (void)data;
+    (void)data_type;
+    (void)cookie;
+    (void)iter_info;
+    ksu_check_packages_list(file_name, mask);
+    return 0;
+}
+
+static const struct fsnotify_ops ksu_ops = {
+    .handle_event = ksu_handle_event,
+};
+#else
+static int ksu_handle_inode_event(struct fsnotify_mark *mark, u32 mask, struct inode *inode, struct inode *dir,
+                                  const struct qstr *file_name, u32 cookie)
+{
+    (void)mark;
+    (void)inode;
+    (void)dir;
+    (void)cookie;
+    ksu_check_packages_list(file_name, mask);
+    return 0;
+}
+
+static const struct fsnotify_ops ksu_ops = {
+    .handle_inode_event = ksu_handle_inode_event,
+};
+#endif"""
+    if s4.count(old_impl) == 1:
+        s4 = s4.replace(old_impl, new_impl, 1)
         pkg.write_text(s4)
-        OK.append("[15-pkg_observer] 4.19 下改为空实现")
+        OK.append("[15-pkg_observer] 4.19 改用 handle_event 适配，功能保留")
     else:
-        FAIL.append(f"[15-pkg_observer] anchor 命中数异常: {s4.count(anchor)}")
+        FAIL.append("[15-pkg_observer] 目标实现未命中: %d" % (s4.count(old_impl),))
+
 
 # ---------- 16. Ultra 4.19 兼容：TWA_RESUME / path_umount / path_mount ----------
 for f in ["drivers/kernelsu/policy/allowlist.c", "drivers/kernelsu/supercall/supercall.c"]:
@@ -252,9 +315,12 @@ sub_optional("drivers/kernelsu/infra/su_mount_ns.c",
     """extern int path_mount(const char *dev_name, struct path *path, const char *type_page, unsigned long flags,
                       void *data_page);""",
     """#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
-/* 4.19 has no path_mount(); mount --make-private is skipped */
-static inline int path_mount(const char *dev_name, struct path *path, const char *type_page, unsigned long flags, void *data_page)
-{ (void)dev_name; (void)path; (void)type_page; (void)flags; (void)data_page; return 0; }
+/* 4.19 has no path_mount(); do_mount() takes the same arguments and is in-tree */
+extern long do_mount(const char *dev_name, struct path *path, const char *type_page,
+                     unsigned long flags, void *data_page);
+static inline int path_mount(const char *dev_name, struct path *path, const char *type_page,
+                             unsigned long flags, void *data_page)
+{ return (int)do_mount(dev_name, path, type_page, flags, data_page); }
 #else
 extern int path_mount(const char *dev_name, struct path *path, const char *type_page, unsigned long flags,
                       void *data_page);
