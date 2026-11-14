@@ -334,6 +334,35 @@ sub_optional("drivers/kernelsu/sulog/event.c",
     '#include <linux/kernel.h>',
     1, "20-sulog-minmax")
 
+# ---------- 21. 链接期未定义符号：seccomp_filter_release（5.9+）+ nidhi SUSFS 期望的 3 个符号 ----------
+sub_optional("drivers/kernelsu/policy/app_profile.c",
+    "void seccomp_filter_release(struct task_struct *tsk);",
+    "#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)\nvoid seccomp_filter_release(struct task_struct *tsk);\n#endif",
+    1, "21-seccomp-decl")
+
+sub_optional("drivers/kernelsu/policy/app_profile.c",
+    "    seccomp_filter_release(fake);",
+    "#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)\n    seccomp_filter_release(fake);\n#endif",
+    1, "21-seccomp-call")
+
+fp = pathlib.Path("drivers/kernelsu/core/init.c")
+if fp.exists():
+    s21 = fp.read_text()
+    if "susfs_is_current_ksu_domain" not in s21:
+        s21 = s21.rstrip("\n") + """
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+/* nidhi SUSFS expects these from the KSU side; Ultra does not provide them */
+bool susfs_is_current_ksu_domain(void) { return false; }
+unsigned int susfs_ksu_sid = 0;
+unsigned int susfs_priv_app_sid = 0;
+#endif
+"""
+        fp.write_text(s21)
+        OK.append("[21-susfs-sym] 4.19 下补 3 个空实现符号")
+    else:
+        OK.append("[21-susfs-sym] 已存在，跳过")
+
 print("=" * 60)
 for k in OK: print("OK  ", k)
 for f in FAIL: print("FAIL", f)
