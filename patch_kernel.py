@@ -328,6 +328,12 @@ stub_file("drivers/kernelsu/selinux/sepolicy.c", '#include "ss/symtab.h"',
     """/* 4.19: sepolicy helpers are unused once rules.c and selinux_hide.c are stubbed */""",
     "19-sepolicy")
 
+# ---------- 20. sulog 引用 5.0+ 才有的 linux/minmax.h ----------
+sub_optional("drivers/kernelsu/sulog/event.c",
+    '#include <linux/minmax.h>',
+    '#include <linux/kernel.h>',
+    1, "20-sulog-minmax")
+
 print("=" * 60)
 for k in OK: print("OK  ", k)
 for f in FAIL: print("FAIL", f)
