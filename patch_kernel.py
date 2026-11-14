@@ -239,21 +239,27 @@ static const struct fsnotify_ops ksu_ops = {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
 /* 4.19: fsnotify_ops only has handle_event; adapt its signature */
 static int ksu_handle_event(struct fsnotify_group *group, struct inode *inode,
-                            struct fsnotify_mark *inode_mark,
-                            struct fsnotify_mark *vfsmount_mark,
                             u32 mask, const void *data, int data_type,
-                            const struct qstr *file_name, u32 cookie,
+                            const unsigned char *file_name, u32 cookie,
                             struct fsnotify_iter_info *iter_info)
 {
+    struct qstr name;
+
     (void)group;
     (void)inode;
-    (void)inode_mark;
-    (void)vfsmount_mark;
     (void)data;
     (void)data_type;
     (void)cookie;
     (void)iter_info;
-    ksu_check_packages_list(file_name, mask);
+
+    if (!file_name)
+        return 0;
+
+    name.name = file_name;
+    name.len = strlen(file_name);
+    name.hash = 0;
+
+    ksu_check_packages_list(&name, mask);
     return 0;
 }
 
