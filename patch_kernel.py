@@ -367,6 +367,17 @@ unsigned int susfs_priv_app_sid = 0;
 add_config("arch/arm64/configs/vendor/xiaomi/magictime-common.config",
            "CONFIG_KPM=y", label="22-KPM")
 
+# ---------- 23. KPM: access_ok 4.19 需要三参数 ----------
+sub("KernelSU/kernel/extension/kpm/kpm.c",
+    "if (!access_ok(u64_to_user_ptr(cmd.result_code), sizeof(result))",
+    "#if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)\n"
+    "    if (!access_ok(VERIFY_WRITE, u64_to_user_ptr(cmd.result_code), sizeof(result)))\n"
+    "#else\n"
+    "    if (!access_ok(u64_to_user_ptr(cmd.result_code), sizeof(result)))\n"
+    "#endif\n"
+    "    ",
+    label="23-KPM-access_ok")
+
 print("=" * 60)
 for k in OK: print("OK  ", k)
 for f in FAIL: print("FAIL", f)
