@@ -62,7 +62,6 @@
 - `kernel.string` 内容：`NidhiKernel 4.19.325-Nidhi-1.3.0-e9f0f7d-cip136 (miui, lmi)`
 - 包内 `banner` 末尾：`Build by QW351784 · github.com/QW351784`
 
-> `v1.0` 当初是裸镜像包（只有 `kernels/Image` + `kernels/dtb`，没有 `anykernel.sh`，Recovery 刷不进），现在已经重打成 AnyKernel3 结构。
 
 ## 怎么刷
 
@@ -86,7 +85,7 @@
 
 ## 作者
 
-**QW351784** · https://github.com/QW351784
+**QW351784**
 
 全部改动在 `patch_kernel.py`，构建流程在 `.github/workflows/build.yml`，都是公开的，可以自己看。
 
