@@ -260,6 +260,14 @@ extern int path_mount(const char *dev_name, struct path *path, const char *type_
                       void *data_page);
 #endif""", 1, "16-path_mount")
 
+# ---------- 17. Ultra app_profile.c 兼容 4.19 ----------
+# 4.19 的 struct seccomp 没有 filter_count（5.9 加 seccomp cache 时才有）
+sub_optional("drivers/kernelsu/policy/app_profile.c",
+    "    atomic_set(&current->seccomp.filter_count, 0);",
+    """#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+    atomic_set(&current->seccomp.filter_count, 0);
+#endif""", 1, "17-seccomp-filter-count")
+
 print("=" * 60)
 for k in OK: print("OK  ", k)
 for f in FAIL: print("FAIL", f)
