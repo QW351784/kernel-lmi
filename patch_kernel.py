@@ -369,13 +369,14 @@ add_config("arch/arm64/configs/vendor/xiaomi/magictime-common.config",
 
 # ---------- 23. KPM: access_ok 4.19 需要三参数 ----------
 sub("KernelSU/kernel/extension/kpm/kpm.c",
-    "if (!access_ok(u64_to_user_ptr(cmd.result_code), sizeof(result))",
+    "if (!access_ok(u64_to_user_ptr(cmd.result_code), sizeof(result))) return -EFAULT;\n",
     "#if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)\n"
     "    if (!access_ok(VERIFY_WRITE, u64_to_user_ptr(cmd.result_code), sizeof(result)))\n"
+    "        return -EFAULT;\n"
     "#else\n"
     "    if (!access_ok(u64_to_user_ptr(cmd.result_code), sizeof(result)))\n"
-    "#endif\n"
-    "    ",
+    "        return -EFAULT;\n"
+    "#endif\n",
     label="23-KPM-access_ok")
 
 # ---------- 23b. KPM: 补 linux/version.h 以定义 KERNEL_VERSION ----------
