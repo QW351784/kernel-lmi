@@ -275,6 +275,23 @@ sub_optional("drivers/kernelsu/policy/app_profile.c",
     atomic_set(&current->seccomp.filter_count, 0);
 #endif""", 1, "17-filter_count")
 
+# ---------- 18. Ultra cpu_spoof.c 兼容 4.19（vDSO 时钟接口是 5.3+） ----------
+sub_optional("drivers/kernelsu/extension/cpu_spoof.c",
+    "                {\n                    struct clocksource **curr_cs_ptr =",
+    "#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)\n                {\n                    struct clocksource **curr_cs_ptr =",
+    1, "18-vdso-head")
+sub_optional("drivers/kernelsu/extension/cpu_spoof.c",
+    """                        pr_warn("ksu: set_spoof_cpu failed to resolve 'cpu_hwcaps' / 'system_cpucaps'\\n");
+                        ++missing;
+                    }
+                }""",
+    """                        pr_warn("ksu: set_spoof_cpu failed to resolve 'cpu_hwcaps' / 'system_cpucaps'\\n");
+                        ++missing;
+                    }
+                }
+#endif /* LINUX_VERSION_CODE < 5.3.0 */""",
+    1, "18-vdso-tail")
+
 print("=" * 60)
 for k in OK: print("OK  ", k)
 for f in FAIL: print("FAIL", f)
