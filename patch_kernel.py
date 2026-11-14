@@ -378,6 +378,12 @@ sub("KernelSU/kernel/extension/kpm/kpm.c",
     "    ",
     label="23-KPM-access_ok")
 
+# ---------- 23b. KPM: 补 linux/version.h 以定义 KERNEL_VERSION ----------
+sub("KernelSU/kernel/extension/kpm/kpm.c",
+    "#include <linux/uaccess.h>\n",
+    "#include <linux/uaccess.h>\n#include <linux/version.h>\n",
+    label="23b-KPM-version-h")
+
 print("=" * 60)
 for k in OK: print("OK  ", k)
 for f in FAIL: print("FAIL", f)
