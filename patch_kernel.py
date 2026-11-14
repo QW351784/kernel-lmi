@@ -268,6 +268,13 @@ sub_optional("drivers/kernelsu/policy/app_profile.c",
     atomic_set(&current->seccomp.filter_count, 0);
 #endif""", 1, "17-seccomp-filter-count")
 
+# ---------- 17. Ultra app_profile.c 兼容 4.19（seccomp.filter_count） ----------
+sub_optional("drivers/kernelsu/policy/app_profile.c",
+    "    atomic_set(&current->seccomp.filter_count, 0);",
+    """#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+    atomic_set(&current->seccomp.filter_count, 0);
+#endif""", 1, "17-filter_count")
+
 print("=" * 60)
 for k in OK: print("OK  ", k)
 for f in FAIL: print("FAIL", f)
