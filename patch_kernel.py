@@ -221,6 +221,45 @@ void ksu_observer_exit(void) { }
     else:
         FAIL.append(f"[15-pkg_observer] anchor 命中数异常: {s4.count(anchor)}")
 
+# ---------- 16. Ultra 4.19 兼容：TWA_RESUME / path_umount / path_mount ----------
+for f in ["drivers/kernelsu/policy/allowlist.c", "drivers/kernelsu/supercall/supercall.c"]:
+    fp = pathlib.Path(f)
+    if fp.exists():
+        s5 = fp.read_text()
+        if "define TWA_RESUME" in s5:
+            OK.append(f"[16-twa] {f} 已有保护")
+        else:
+            lines = s5.split("\n")
+            idxs = [i for i, l in enumerate(lines) if l.strip().startswith("#include")]
+            ins = idxs[-1] + 1 if idxs else 0
+            lines[ins:ins] = ["", "#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0) && !defined(TWA_RESUME)",
+                              "#define TWA_RESUME true", "#endif"]
+            fp.write_text("\n".join(lines))
+            OK.append(f"[16-twa] {f} 加保护宏")
+    else:
+        OK.append(f"[16-twa] {f} 跳过（不存在）")
+
+sub_optional("drivers/kernelsu/feature/kernel_umount.c",
+    "extern int path_umount(struct path *path, int flags);",
+    """#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
+/* 4.19 has no path_umount(); kern_unmount() is exported */
+static int path_umount(struct path *path, int flags) { (void)flags; kern_unmount(path->mnt); return 0; }
+#else
+extern int path_umount(struct path *path, int flags);
+#endif""", 1, "16-path_umount")
+
+sub_optional("drivers/kernelsu/infra/su_mount_ns.c",
+    """extern int path_mount(const char *dev_name, struct path *path, const char *type_page, unsigned long flags,
+                      void *data_page);""",
+    """#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
+/* 4.19 has no path_mount(); mount --make-private is skipped */
+static inline int path_mount(const char *dev_name, struct path *path, const char *type_page, unsigned long flags, void *data_page)
+{ (void)dev_name; (void)path; (void)type_page; (void)flags; (void)data_page; return 0; }
+#else
+extern int path_mount(const char *dev_name, struct path *path, const char *type_page, unsigned long flags,
+                      void *data_page);
+#endif""", 1, "16-path_mount")
+
 print("=" * 60)
 for k in OK: print("OK  ", k)
 for f in FAIL: print("FAIL", f)
