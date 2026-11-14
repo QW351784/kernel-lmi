@@ -292,6 +292,42 @@ sub_optional("drivers/kernelsu/extension/cpu_spoof.c",
 #endif /* LINUX_VERSION_CODE < 5.3.0 */""",
     1, "18-vdso-tail")
 
+# ---------- 19. Ultra SELinux 子系统兼容 4.19（selinux_policy 是 5.9+ 才分离出来） ----------
+def stub_file(path, anchor, body, label):
+    fp = pathlib.Path(path)
+    if not fp.exists():
+        OK.append(f"[{label}] 跳过：{path} 不存在")
+        return
+    s6 = fp.read_text()
+    if s6.count(anchor) != 1:
+        FAIL.append(f"[{label}] anchor 命中数异常: {s6.count(anchor)}")
+        return
+    s6 = s6.replace(anchor, anchor + "\n\n#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)\n" + body + "\n#else", 1)
+    s6 = s6.rstrip("\n") + "\n\n#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0) */\n"
+    fp.write_text(s6)
+    OK.append(f"[{label}] 4.19 下空实现/跳过")
+
+stub_file("drivers/kernelsu/selinux/rules.c", '#include "xfrm.h"',
+    """/* 4.19 keeps policy inside struct selinux_ss; the selinux_policy split exists only from 5.9 */
+struct selinux_policy;
+struct selinux_policy *backup_sepolicy = NULL;
+void apply_kernelsu_rules(void) { }
+int handle_sepolicy(void __user *user_data, u64 data_len) { (void)user_data; (void)data_len; return -EINVAL; }""",
+    "19-rules")
+
+stub_file("drivers/kernelsu/feature/selinux_hide.c", '#include "ksu.h"',
+    """/* 4.19: selinux_policy split does not exist, hide feature disabled */
+void ksu_selinux_hide_init(void) { }
+void ksu_selinux_hide_exit(void) { }
+void ksu_selinux_hide_drop_backup_if_unused(void) { }
+void ksu_selinux_hide_handle_second_stage(void) { }
+void ksu_selinux_hide_handle_post_fs_data(void) { }""",
+    "19-selinux_hide")
+
+stub_file("drivers/kernelsu/selinux/sepolicy.c", '#include "ss/symtab.h"',
+    """/* 4.19: sepolicy helpers are unused once rules.c and selinux_hide.c are stubbed */""",
+    "19-sepolicy")
+
 print("=" * 60)
 for k in OK: print("OK  ", k)
 for f in FAIL: print("FAIL", f)
