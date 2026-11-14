@@ -363,6 +363,10 @@ unsigned int susfs_priv_app_sid = 0;
     else:
         OK.append("[21-susfs-sym] 已存在，跳过")
 
+# ---------- 22. 打开 KPM（config KPM 是 default n，且 select KALLSYMS_ALL） ----------
+add_config("arch/arm64/configs/vendor/xiaomi/magictime-common.config",
+           "CONFIG_KPM=y", label="22-KPM")
+
 print("=" * 60)
 for k in OK: print("OK  ", k)
 for f in FAIL: print("FAIL", f)
