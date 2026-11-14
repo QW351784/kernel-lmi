@@ -315,12 +315,31 @@ sub_optional("drivers/kernelsu/infra/su_mount_ns.c",
     """extern int path_mount(const char *dev_name, struct path *path, const char *type_page, unsigned long flags,
                       void *data_page);""",
     """#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
-/* 4.19 has no path_mount(); do_mount() takes the same arguments and is in-tree */
-extern long do_mount(const char *dev_name, struct path *path, const char *type_page,
+#include <linux/err.h>
+#include <linux/mm.h>
+
+/* 4.19 has no path_mount(); do_mount() takes a path *string* (dir_name), not struct path */
+extern long do_mount(const char *dev_name, const char *dir_name, const char *type_page,
                      unsigned long flags, void *data_page);
 static inline int path_mount(const char *dev_name, struct path *path, const char *type_page,
                              unsigned long flags, void *data_page)
-{ return (int)do_mount(dev_name, path, type_page, flags, data_page); }
+{
+    char *buf, *p;
+    int ret;
+
+    buf = (char *)__get_free_page(GFP_KERNEL);
+    if (!buf)
+        return -ENOMEM;
+
+    p = d_path(path, buf, PAGE_SIZE);
+    if (IS_ERR(p)) {
+        ret = (int)PTR_ERR(p);
+    } else {
+        ret = (int)do_mount(dev_name, p, type_page, flags, data_page);
+    }
+    free_page((unsigned long)buf);
+    return ret;
+}
 #else
 extern int path_mount(const char *dev_name, struct path *path, const char *type_page, unsigned long flags,
                       void *data_page);
