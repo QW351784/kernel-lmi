@@ -13,26 +13,56 @@
 | 机型 | Redmi K30 Pro |
 | 代号 | `lmi` |
 | 平台 | 高通 SM8250（骁龙 865） |
-| 系统 | MIUI（AOSP 版另有一份包） |
 | 刷入分区 | `boot`（`/dev/block/bootdevice/by-name/boot`） |
 
 只认 `lmi`。刷机脚本里有 `do.devicecheck=1` + `device.name1=lmi`，别的机型会直接拦下不刷。
 
 ## 内核是什么
 
-- **基线**：nidhi 4.19.325（`kaixenberg/kernel_xiaomi_sm8250`）
-- **长期维护补丁**：CIP `cip136`
-- **当前版本串**：`4.19.325-Nidhi-1.3.0-e9f0f7d-cip136 SMP preempt mod_unload modversions aarch64`
-- **工具链**：Neutron clang 24.0.0git + Neutron LLD 24.0.0
-- **编译优化**：thin LTO（`LTO_CLANG_THIN`），保留 `DEBUG_INFO`
-- **构建环境**：GitHub Actions，`ubuntu-24.04`，`JOBS=4`
+**基线**：nidhi 4.19.325（`kaixenberg/kernel_xiaomi_sm8250`）。作者官方只列 alioth / apollo / pipa，lmi 不在支持范围，得自己验。
+
+**长期维护补丁（CIP）**：
+
+- v1.0 ~ v1.5 用的是 **cip127**，走作者早前的 GitLab `android16-aptusitu` 分支
+- v1.6 换代到作者的 GitHub `nidhi` 分支，作者本人已经把 CIP 从 cip127 上移到 **cip136**
+- 这一步跨了 9 个 CIP 小版本，net / fs / drivers 等 1700+ 文件跟着更新，和内核的 `localversion-cip=-cip136`、`localversion-st=-st20` 对得上
+- v1.6 之后一直停在 cip136，没有再往上走
+
+**工具链（换了三次）**：
+
+- v1.0 ~ v1.1：**ZyC clang 15.0.7** + GNU ld
+- v1.2：还是 ZyC clang 15.0.7，这版动的是 LTO，不是工具链
+- v1.3：ZyC clang **16.0.6-20260807**
+- v1.4 起：**Neutron clang 24.0.0git**（06092026）+ Neutron LLD 24.0.0，一直用到现在的 v1.9 和修复版
+- 从 15 到 24，跨了 8 个 LLVM 大版本
+
+**编译优化**：
+
+- v1.0 ~ v1.1：**full LTO**，Image 53.8 MB
+- v1.2 起改成 **thin LTO**，Image 53.8 → 47.5 MB，降 11.7%（这版你刷过，实测开机成功）；同时留了 `thin` / `none` 两档可切
+- v1.6 的 thin LTO 上加回 `CFI_CLANG=y`，Image 涨到 57.7 MB
+- **修复版（v1.4 起重编）**：thin LTO 保留，但**关掉 `CFI_CLANG` 和 `SHADOW_CALL_STACK`**。原因是 clang 24 出的是 KCFI 新格式，4.19 内核里的 CFI 运行时还是老格式，对不上会在启动早期跳转校验失败，表现就是刷进去了卡在 fastboot
+
+**版本串差异**：v1.0 ~ v1.5 版本串是 `Nidhi-1.2.5`，v1.6 起变 `Nidhi-1.3.0`。
+
+**当前版本串**：`4.19.325-Nidhi-1.3.0-e9f0f7d-cip136 SMP preempt mod_unload modversions aarch64`
+
+**构建环境**：GitHub Actions，`ubuntu-24.04`，`JOBS=2`（免费 runner 只有 2 核，开 4 反而互相抢核）
 
 ## 带的东西
 
 ### Root
 
-- **SukiSU-Ultra** 41180（包名 `com.sukisu.ultra`），不是原版 KernelSU
-- **KPM** 真正启用，刷完在管理器里能看到 `KPM is built in`
+**管理器换过三代**：
+
+- **v1.0**：内置 BakaSU v4.2.0-rc3，但没打 manual hook，root 编进去了却不工作
+- **v1.1 ~ v1.5**：还是 BakaSU，v1.1 补了 5 处 manual hook 之后 root 才真正能用
+- **v1.6**：换成作者内置的 **backslashxx KernelSU**（version code 32725），管理器得配 backslashxx 版或 KOWX712 版
+- **v1.7**：换成 **SukiSU-Ultra**，第一次在 4.19 上编得过，代价是 `pkg_observer` 和 `seccomp_cache` 只是空实现
+- **v1.8**：Ultra **41179**，同时 `CONFIG_KPM=y` 真正打开，`strings Image` 里能看到 `KPM is built in`
+- **v1.9**：Ultra **41180**，修好 `do_mount` 与 `handle_event`，包名观察恢复，KPM 仍然 built in
+
+**KPM**：v1.0 ~ v1.7 都没真正启用，v1.8 起才打开。为这个改了三处 4.19 兼容：`access_ok()` 的三参数形式、补 `linux/version.h`、整行替换避免括号不配对。
 
 > 管理器版本低于 41180 会提示「需要更新内核」，那是管理器旧了，不是内核坏了。
 
