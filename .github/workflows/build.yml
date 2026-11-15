@@ -205,6 +205,7 @@ jobs:
               'ui_print "";\n'
               'ui_print "酷安作者账号：QW123456780";\n'
               'ui_print "借鉴：nidhi(kaixenberg) / AnyKernel3(osm0sis) / MagicTime(TIMISONG-dev) / SukiSU-Ultra";\n'
+              'ui_print "作者制作维护不容易，爱心捐款，一杯奶茶价钱，就是作者继续维护更新的动力";\n'
           )
           if marker in s and "酷安作者账号" not in s:
               s = s.replace(marker, lines + marker, 1)
