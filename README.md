@@ -2,7 +2,7 @@
 
 红米 K30 Pro（`lmi`）的 4.19.325 自编译内核 —— 内置 KernelSU 变体、SUSFS 隐藏、KPM 扩展。
 
-**作者：QW351784** · https://github.com/QW351784
+**作者：QW351784**
 
 ---
 
@@ -91,7 +91,7 @@
 
 ## 借鉴与致谢
 
-这个项目不是从零做出来的，底子全是别人的。每一条都写明了**借谁、在哪、借了什么**：
+谢谢下面这些团队的支持：
 
 - **nidhi 4.19.325 内核基线** — kaixenberg · https://github.com/kaixenberg/kernel_xiaomi_sm8250
 - **CIP cip136 长期维护补丁** — CIP 团队 · https://git.kernel.org/pub/scm/linux/kernel/git/cip/linux-cip.git
