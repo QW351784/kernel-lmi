@@ -171,7 +171,7 @@ jobs:
         working-directory: kernel
         run: |
           set -o pipefail
-          ./build.sh > /tmp/build_all.log 2>&1 || {
+          ./build.sh 2>&1 | tee /tmp/build_all.log || {
             echo "########## tail 40 ##########"
             tail -40 /tmp/build_all.log
             echo "########## ERRORS (last block, keep at output end) ##########"
