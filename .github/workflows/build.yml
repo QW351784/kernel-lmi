@@ -137,7 +137,7 @@ jobs:
         working-directory: kernel
         run: |
           set -o pipefail
-          ./build.sh 2>&1 | tail -100
+          ./build.sh 2>&1 | tee /tmp/build_all.log
 
       - name: Inject Install Screen Text
         working-directory: kernel
@@ -252,11 +252,27 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -e
           cd kernel
           ZIP=$(ls out/*.zip | head -1)
           REL=$(cat out/include/config/kernel.release)
-          TAG="build-cip136-$(date -u +%m%d%H%M)"
-          gh release create "$TAG" "$ZIP" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "$TAG lmi cip136" \
-            --notes "uname: $REL / device: lmi / variant: $VARIANT / lto: $LTO_MODE / toolchain: Neutron clang 24.0.0git"
+          echo "uname: $REL / device: lmi / variant: $VARIANT / lto: $LTO_MODE"
+          echo "=== 直接覆盖 v1.5 的正式资产，不新建 tag ==="
+          REL_ID=$(curl -s -H "Authorization: token $GH_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/v1.5" \
+            | python3 -c "import json,sys;print(json.load(sys.stdin)['id'])")
+          echo "release id: $REL_ID"
+          for AID in $(curl -s -H "Authorization: token $GH_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/$REL_ID/assets" \
+            | python3 -c "import json,sys;print(' '.join(str(a['id']) for a in json.load(sys.stdin)))"); do
+            echo "删旧资产 $AID"
+            curl -s -o /dev/null -X DELETE -H "Authorization: token $GH_TOKEN" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/assets/$AID"
+          done
+          echo "上传新包并命名 NidhiKernel-lmi-v1.5.zip"
+          curl -sS -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Content-Type: application/zip" \
+            --data-binary @"$ZIP" \
+            "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$REL_ID/assets?name=NidhiKernel-lmi-v1.5.zip" \
+            | python3 -c "import json,sys;d=json.load(sys.stdin);print('上传完成:', d.get('name'), d.get('size'), 'B')"
