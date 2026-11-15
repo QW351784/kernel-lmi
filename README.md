@@ -38,7 +38,7 @@
 
 **编译优化**：
 
-- v1.0 ~ v1.1：**full LTO**，Image 53.8 MB
+- v1.0 ~ v1.1：**full LTO**，Image 53.8 MB。full LTO 在链接阶段吃内存很凶，当时 4 并发会被 OOM 杀掉 clang，所以 full 这一档被固定成 `-J1` 单线程跑，靠慢换编得出来
 - v1.2 起改成 **thin LTO**，Image 53.8 → 47.5 MB，降 11.7%（这版你刷过，实测开机成功）；同时留了 `thin` / `none` 两档可切
 - v1.6 的 thin LTO 上加回 `CFI_CLANG=y`，Image 涨到 57.7 MB
 - **修复版（v1.4 起重编）**：thin LTO 保留，但**关掉 `CFI_CLANG` 和 `SHADOW_CALL_STACK`**。原因是 clang 24 出的是 KCFI 新格式，4.19 内核里的 CFI 运行时还是老格式，对不上会在启动早期跳转校验失败，表现就是刷进去了卡在 fastboot
