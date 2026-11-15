@@ -46,7 +46,7 @@
 
 **版本串差异**：v1.0 ~ v1.5 版本串是 `Nidhi-1.2.5`，v1.6 起变 `Nidhi-1.3.0`。
 
-**当前版本串**：`4.19.325-Nidhi-1.3.0-e9f0f7d-cip136 SMP preempt mod_unload modversions aarch64`
+**当前版本串**：`4.19.325-Nidhi-1.3.0-97de058-cip136 SMP preempt mod_unload modversions aarch64`
 
 **构建环境**：GitHub Actions，`ubuntu-24.04`，`JOBS=2`（免费 runner 只有 2 核，开 4 反而互相抢核）
 
