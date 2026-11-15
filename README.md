@@ -38,10 +38,11 @@
 
 **编译优化**：
 
-- v1.0 ~ v1.1：**full LTO**，Image 53.8 MB。full LTO 在链接阶段吃内存很凶，当时 4 并发会被 OOM 杀掉 clang，所以 full 这一档被固定成 `-J1` 单线程跑，靠慢换编得出来
-- v1.2 起改成 **thin LTO**，Image 53.8 → 47.5 MB，降 11.7%（这版你刷过，实测开机成功）；同时留了 `thin` / `none` 两档可切
-- v1.6 的 thin LTO 上加回 `CFI_CLANG=y`，Image 涨到 57.7 MB
-- **修复版（v1.4 起重编）**：thin LTO 保留，但**关掉 `CFI_CLANG` 和 `SHADOW_CALL_STACK`**。原因是 clang 24 出的是 KCFI 新格式，4.19 内核里的 CFI 运行时还是老格式，对不上会在启动早期跳转校验失败，表现就是刷进去了卡在 fastboot
+- v1.0 ~ v1.3：**LTO 是关的**。从包里的 Image 抠出来的 config 写的是 `CONFIG_LTO_NONE=y`；v1.0 / v1.1 的 Image 53.8 MB，v1.2 / v1.3 是 47.5 MB。LTO 一关，`CFI_CLANG` 因为依赖 LTO 也跟着自动关掉了，所以这四个版本压根没有 CFI 校验这回事，自然不会有卡 fastboot 的问题
+- v1.4 起把 **thin LTO** 打开（`CONFIG_LTO_CLANG=y` + `CONFIG_THINLTO=y`），`CFI_CLANG` 跟着回来了，Image 落在 51.4 MB 上下
+- v1.6 那版 Image 一度涨到 57.7 MB（thin + CFI，加上调度器换成 EEVDF 之后编译单元变大）
+- **修复版（v1.4 起重编）**：thin LTO 保留，但**关掉 `CFI_CLANG` 和 `SHADOW_CALL_STACK`**。原因是 clang 24 出的是 KCFI 新格式，4.19 内核里的 CFI 运行时还是老格式，对不上会在启动早期跳转校验失败，表现就是刷进去了卡在 fastboot。这六个包都解出来验过，Image 里明确是 `# CONFIG_CFI_CLANG is not set`
+- v1.9 单独走 **full LTO**（显式 `# CONFIG_THINLTO is not set`）+ 单线程。之前一版漏了这行显式关闭，Kconfig 的默认 y 又把它选回来，实际跑成了 thin，是后来查 Image 里的 config 才发现并修掉的
 
 **版本串差异**：v1.0 ~ v1.5 版本串是 `Nidhi-1.2.5`，v1.6 起变 `Nidhi-1.3.0`。
 
