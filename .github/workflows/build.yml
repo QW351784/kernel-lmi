@@ -266,6 +266,15 @@ jobs:
               print("marker 未找到或已存在，未改动")
           PY
           grep -n "ui_print" $AK || true
+          echo "=== 重新打包（原 zip 是 build.sh 打的，改了 anykernel.sh 必须重打） ==="
+          ZIP=$(ls out/*.zip | head -1)
+          ZIPBASE=$(basename "$ZIP")
+          echo "原包: $ZIPBASE"
+          rm -f "$ZIP"
+          ( cd out/ak3 && zip -qr "../../$ZIPBASE" . )
+          ls -la "$ZIP"
+          echo "=== 重打包后校验 ui_print 是否在包里 ==="
+          unzip -p "$ZIP" anykernel.sh | grep -c "ui_print" || echo "0"
 
       - name: Verify Artifacts
         working-directory: kernel
