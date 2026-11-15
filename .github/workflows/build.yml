@@ -271,7 +271,7 @@ jobs:
           ZIPBASE=$(basename "$ZIP")
           echo "原包: $ZIPBASE"
           rm -f "$ZIP"
-          ( cd out/ak3 && zip -qr "../../$ZIPBASE" . )
+          ( cd out/ak3 && zip -qr "../$ZIPBASE" . )
           ls -la "$ZIP"
           echo "=== 重打包后校验 ui_print 是否在包里 ==="
           unzip -p "$ZIP" anykernel.sh | grep -c "ui_print" || echo "0"
