@@ -153,6 +153,8 @@ jobs:
               ;;
             full)
               sed -i '/^CONFIG_THINLTO=y/d' $DEF
+              sed -i '/CONFIG_THINLTO is not set/d' $DEF
+              echo "# CONFIG_THINLTO is not set" >> $DEF
               sed -i 's/^CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/' $DEF
               sed -i 's/^CONFIG_SHADOW_CALL_STACK=y/# CONFIG_SHADOW_CALL_STACK is not set/' $DEF
               ;;
@@ -199,87 +201,105 @@ jobs:
           set -e
           AK=out/ak3/anykernel.sh
           [ -f "$AK" ] || { echo "anykernel.sh 不存在，跳过"; exit 0; }
-          # 在 write_boot 之前插入两行 ui_print
           python3 - "$AK" << 'PY'
           import sys, pathlib
           p = pathlib.Path(sys.argv[1])
           s = p.read_text(encoding='utf-8', errors='replace')
           marker = "write_boot;"
-          lines = (
-              'ui_print "";\n'
-              'ui_print "酷安作者账号：QW123456780";\n'
-              'ui_print "借鉴：nidhi(kaixenberg) / AnyKernel3(osm0sis) / MagicTime(TIMISONG-dev) / SukiSU-Ultra";\n'
-              'ui_print "作者制作维护不容易，爱心捐款，一杯奶茶价钱，就是作者继续维护更新的动力";\n'
-              '\n'
-              '# TWRP 只给了 ui_print，这里补一个进度条通道\n'
-              'set_progress() {\n'
-              '  echo "set_progress $1" >> /proc/self/fd/$OUTFD;\n'
-              '};\n'
-              '\n'
-              '# 画方块进度条：bar <百分比> <说明>\n'
-              'bar() {\n'
-              '  PC=$1; TXT=$2; N=$((PC / 5));\n'
-              '  FILL=""; EMPTY=""; I=0;\n'
-              '  while [ $I -lt $N ]; do FILL="$FILL#"; I=$((I + 1)); done;\n'
-              '  while [ $I -lt 20 ]; do EMPTY="$EMPTY."; I=$((I + 1)); done;\n'
-              '  ui_print "[$FILL$EMPTY] ${PC}% $TXT";\n'
-              '  set_progress $(awk -v p="$PC" \'BEGIN{printf "%.2f", p/100}\');\n'
-              '};\n'
-              '\n'
-              'ui_print "========== 步进 1/2：MD5 校验 ==========";\n'
-              'ui_print "按【音量加】校验刷机包 MD5，按【音量减】跳过（10 秒内无操作默认跳过）";\n'
-              'KEY=$(get_key 10 2>/dev/null || echo "");\n'
-              'if [ "$KEY" = "115" ] && [ -n "$3" ] && [ -f "$3" ]; then\n'
-              '  SIZE=$(wc -c < "$3" | tr -d " ");\n'
-              '  ui_print "刷机包大小：$SIZE 字节";\n'
-              '  CHUNK=1048576; OFF=0;\n'
-              '  while [ $OFF -lt $SIZE ]; do\n'
-              '    dd if="$3" of=/dev/null bs=1048576 skip=$((OFF / CHUNK)) count=1 2>/dev/null;\n'
-              '    OFF=$((OFF + CHUNK));\n'
-              '    PC=$((OFF * 100 / SIZE)); [ $PC -gt 99 ] && PC=99;\n'
-              '    bar $PC "读取校验中";\n'
-              '  done;\n'
-              '  ui_print "";\n'
-              '  ui_print "正在计算完整 MD5（这一步不能中断）...";\n'
-              '  MD5=$(md5sum "$3" 2>/dev/null | awk \'{print $1}\');\n'
-              '  bar 100 "MD5 校验完成";\n'
-              '  ui_print "刷机包: $(basename "$3")";\n'
-              '  ui_print "MD5: $MD5";\n'
-              '  ui_print "请与发布页提供的 MD5 逐位核对";\n'
-              'else\n'
-              '  bar 100 "已跳过 MD5 校验";\n'
-              'fi;\n'
-              '\n'
-              'ui_print "";\n'
-              'ui_print "========== 步进 2/2：写入 boot ==========";\n'
-              'bar 0 "准备写入";\n'
-              'bar 10 "解包 boot 镜像";\n'
-              'sleep 2;\n'
-              'bar 30 "应用内核与 dtbo";\n'
-              'sleep 2;\n'
-              'bar 60 "重打包 boot";\n'
-              'sleep 2;\n'
-              'bar 85 "写入分区";\n'
-              '\n'
-          )
+          BLOCK = r"""ui_print "";
+          ui_print "酷安作者账号：QW123456780";
+          ui_print "借鉴：nidhi(kaixenberg) / AnyKernel3(osm0sis) / MagicTime(TIMISONG-dev) / SukiSU-Ultra";
+          ui_print "作者制作维护不容易，爱心捐款，一杯奶茶价钱，就是作者继续维护更新的动力";
+          ui_print "";
+
+          # TWRP 只给 ui_print，这里补一条进度通道
+          set_progress() {
+            echo "set_progress $1" >> /proc/self/fd/$OUTFD;
+          };
+
+          # 方块进度条：bar <百分比> <说明>
+          bar() {
+            PC=$1; TXT=$2; N=$((PC / 5));
+            FILL=""; EMPTY=""; I=0;
+            while [ $I -lt $N ]; do FILL="$FILL#"; I=$((I + 1)); done;
+            while [ $I -lt 20 ]; do EMPTY="$EMPTY."; I=$((I + 1)); done;
+            ui_print "[$FILL$EMPTY] ${PC}% $TXT";
+            set_progress $(awk -v p="$PC" 'BEGIN{printf "%.2f", p/100}');
+          };
+
+          # 读音量键：getevent 优先，其次 /sbin/get_key，都没有返回空（等同跳过）
+          get_key() {
+            TM=$1; TMP=/tmp/ak3key.$$;
+            GE="";
+            for c in getevent /sbin/getevent /system/bin/getevent; do
+              command -v "$c" >/dev/null 2>&1 && { GE="$c"; break; }
+            done;
+            if [ -z "$GE" ]; then
+              for tb in toybox /sbin/toybox /system/bin/toybox; do
+                if command -v "$tb" >/dev/null 2>&1 && $tb getevent -h >/dev/null 2>&1; then GE="$tb getevent"; break; fi;
+              done;
+            fi;
+            if [ -n "$GE" ]; then
+              : > $TMP;
+              ( $GE -l -q > $TMP 2>/dev/null ) & GP=$!;
+              I=0; LIM=$((TM * 10));
+              while [ $I -lt $LIM ]; do
+                sleep 0.1 2>/dev/null || sleep 1;
+                if grep -q "KEY_VOLUMEUP.*DOWN" $TMP 2>/dev/null; then kill $GP 2>/dev/null; rm -f $TMP; echo 115; return; fi;
+                if grep -q "KEY_VOLUMEDOWN.*DOWN" $TMP 2>/dev/null; then kill $GP 2>/dev/null; rm -f $TMP; echo 114; return; fi;
+                I=$((I + 1));
+              done;
+              kill $GP 2>/dev/null; wait $GP 2>/dev/null; rm -f $TMP;
+            elif [ -x /sbin/get_key ]; then
+              /sbin/get_key $TM 2>/dev/null; return;
+            fi;
+            echo "";
+          };
+
+          ui_print "========== 步进 1/2：MD5 校验 ==========";
+          ui_print "按【音量加】校验刷机包 MD5，按【音量减】跳过（10 秒无操作默认跳过）";
+          KEY=$(get_key 10 2>/dev/null || echo "");
+          if [ "$KEY" = "115" ] && [ -n "$3" ] && [ -f "$3" ]; then
+            SIZE=$(wc -c < "$3" | tr -d " ");
+            ui_print "刷机包大小：$SIZE 字节";
+            CHUNK=1048576; OFF=0;
+            while [ $OFF -lt $SIZE ]; do
+              dd if="$3" of=/dev/null bs=1048576 skip=$((OFF / CHUNK)) count=1 2>/dev/null;
+              OFF=$((OFF + CHUNK));
+              PC=$((OFF * 100 / SIZE)); [ $PC -gt 99 ] && PC=99;
+              bar $PC "读取校验中";
+            done;
+            ui_print "";
+            ui_print "正在计算完整 MD5（这一步不能中断）...";
+            MD5=$(md5sum "$3" 2>/dev/null | awk '{print $1}');
+            bar 100 "MD5 校验完成";
+            ui_print "刷机包: $(basename "$3")";
+            ui_print "MD5: $MD5";
+            ui_print "请与发布页核对";
+          else
+            bar 100 "已跳过 MD5 校验";
+          fi;
+          ui_print "";
+          ui_print "========== 步进 2/2：写入 boot ==========";
+          bar 0 "准备写入";
+          bar 10 "解包 boot 镜像";
+          """
           if marker in s and "酷安作者账号" not in s:
-              s = s.replace(marker, lines + marker + '\nbar 100 "刷入完成";\nui_print "感谢使用，重启后生效";\n', 1)
+              s = s.replace(marker, BLOCK + "\n" + marker + "\nbar 30 \"应用内核与 dtbo\";\nsleep 2;\nbar 60 \"重打包 boot\";\nbar 85 \"写入分区\";\nbar 100 \"刷入完成\";\nui_print \"感谢使用，重启后生效\";\n", 1)
               p.write_text(s, encoding='utf-8')
               print("已插入 ui_print 与进度条")
           else:
               print("marker 未找到或已存在，未改动")
           PY
-          grep -n "ui_print" $AK || true
-          echo "=== 重新打包（原 zip 是 build.sh 打的，改了 anykernel.sh 必须重打） ==="
+          grep -c "ui_print" $AK
+          echo "=== 重新打包 ==="
           ZIP=$(ls out/*.zip | head -1)
           ZIPBASE=$(basename "$ZIP")
-          echo "原包: $ZIPBASE"
           rm -f "$ZIP"
           ( cd out/ak3 && zip -qr "../$ZIPBASE" . )
           ls -la "$ZIP"
-          echo "=== 重打包后校验 ui_print 是否在包里 ==="
           unzip -p "$ZIP" anykernel.sh | grep -c "ui_print" || echo "0"
-
+          unzip -p "$ZIP" anykernel.sh | grep -c "get_key" || echo "0"
       - name: Verify Artifacts
         working-directory: kernel
         run: |
