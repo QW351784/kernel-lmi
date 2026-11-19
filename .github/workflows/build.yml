@@ -158,6 +158,30 @@ jobs:
           echo "=== KSU line ==="
           grep -n "CONFIG_KSU=" arch/arm64/configs/vendor/xiaomi/magictime-common.config
 
+      - name: Compatibility fixes for multi-Android
+        working-directory: kernel
+        run: |
+          DEF=arch/arm64/configs/lmi_defconfig
+          # 跨 Android 版本兼容：关掉会在异常数据上直接 panic 的项，
+          # 补回 Android 老版本依赖的网络/binder 选项和 WiFi 驱动
+          for kv in \
+            "INIT_ON_ALLOC_DEFAULT_ON=n" \
+            "BUG_ON_DATA_CORRUPTION=n" \
+            "ANDROID_PARANOID_NETWORK=y" \
+            "BINDER_OPT=y" \
+            "CNSS_QCA6390=y" \
+            "FORTIFY_SOURCE=y"; do
+            k=${kv%=*}; v=${kv#*=}
+            sed -i "/^CONFIG_$k=/d;/^# CONFIG_$k is not set/d" $DEF
+            if [ "$v" = "n" ]; then
+              echo "# CONFIG_$k is not set" >> $DEF
+            else
+              echo "CONFIG_$k=$v" >> $DEF
+            fi
+          done
+          echo "=== 兼容项落盘结果 ==="
+          grep -E "INIT_ON_ALLOC|BUG_ON_DATA_CORRUPTION|ANDROID_PARANOID_NETWORK|BINDER_OPT|CNSS_QCA6390|FORTIFY_SOURCE" $DEF || true
+
       - name: Preflight Config Check
         working-directory: kernel
         run: |
