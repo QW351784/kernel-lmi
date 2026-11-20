@@ -219,6 +219,62 @@ jobs:
           path: /tmp/build_all.log
           retention-days: 3
 
+      - name: Patch ak3-core.sh（刷入修复固化）
+        working-directory: kernel
+        run: |
+          set -e
+          CORE=out/ak3/tools/ak3-core.sh
+          [ -f "$CORE" ] || { echo "ak3-core.sh 不存在，跳过"; exit 0; }
+          python3 - "$CORE" << 'PY'
+          import sys, pathlib
+          p = pathlib.Path(sys.argv[1])
+          s = p.read_text(encoding='utf-8', errors='replace')
+          changed = []
+
+          o1 = 'cat boot-new.img /dev/zero > $block 2>/dev/null || true;'
+          n1 = 'dd if=boot-new.img of=$block bs=4096 conv=fsync 2>/dev/null || true;'
+          if o1 in s:
+              s = s.replace(o1, n1)
+              changed.append('boot 写入改成 dd conv=fsync')
+
+          o2 = 'cat $img /dev/zero > $imgblock 2>/dev/null || true;'
+          n2 = 'dd if=$img of=$imgblock bs=4096 conv=fsync 2>/dev/null || true;'
+          if o2 in s:
+              s = s.replace(o2, n2)
+              changed.append('generic 写入改成 dd conv=fsync')
+
+          o3 = 'for path in /dev/block/mapper /dev/block/by-name /dev/block/bootdevice/by-name; do'
+          n3 = 'for path in /dev/block/by-name /dev/block/bootdevice/by-name /dev/block/mapper; do'
+          if o3 in s:
+              s = s.replace(o3, n3)
+              changed.append('分区查找改物理分区优先')
+
+          anchor = '    abort "Flashing image failed. Aborting...";\n  fi;\n}\n\n# flash_generic'
+          vb = ('    abort "Flashing image failed. Aborting...";\n'
+                '  fi;\n'
+                '  for vb in /dev/block/bootdevice/by-name/vbmeta /dev/block/by-name/vbmeta; do\n'
+                '    if [ -e "$vb" ]; then\n'
+                '      ui_print " " "更新 vbmeta 里的 boot hash...";\n'
+                '      $bin/httools_static patch boot $home/boot-new.img "$vb" 2>/dev/null \\\n'
+                '        && ui_print " " "vbmeta 已更新" \\\n'
+                '        || ui_print " " "vbmeta 更新没成功，可能需要手动关 AVB";\n'
+                '      break;\n'
+                '    fi;\n'
+                '  done;\n'
+                '}\n'
+                '\n'
+                '# flash_generic')
+          if 'httools_static patch boot $home/boot-new.img' not in s and anchor in s:
+              s = s.replace(anchor, vb, 1)
+              changed.append('flash_boot 补 vbmeta patch')
+
+          p.write_text(s, encoding='utf-8')
+          print('改动:', changed if changed else '无需改动（已经是修好的）')
+          PY
+          echo "=== 补丁结果校验 ==="
+          grep -c "conv=fsync" "$CORE" || true
+          grep -c "httools_static patch boot" "$CORE" || true
+
       - name: Inject Install Screen Text
         working-directory: kernel
         run: |
