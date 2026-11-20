@@ -170,7 +170,13 @@ jobs:
             "ANDROID_PARANOID_NETWORK=y" \
             "BINDER_OPT=y" \
             "CNSS_QCA6390=y" \
-            "FORTIFY_SOURCE=y"; do
+            "FORTIFY_SOURCE=y" \
+            "DMABUF_HEAPS=y" \
+            "DMABUF_HEAPS_SYSTEM=y" \
+            "DMABUF_HEAPS_CMA=y" \
+            "MODVERSIONS=n" \
+            "INCREMENTAL_FS=y" \
+            "SCHED_CORE=y"; do
             k=${kv%=*}; v=${kv#*=}
             sed -i "/^CONFIG_$k=/d;/^# CONFIG_$k is not set/d" $DEF
             if [ "$v" = "n" ]; then
