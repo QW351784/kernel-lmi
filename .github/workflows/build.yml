@@ -297,6 +297,19 @@ jobs:
           grep -c "conv=fsync" "$CORE" || true
           grep -c "httools_static patch boot" "$CORE" || true
 
+      - name: Fix A-only slot flag (lmi 是单分区，必须 0)
+        working-directory: kernel
+        run: |
+          set -e
+          AK=out/ak3/anykernel.sh
+          [ -f "$AK" ] || { echo "anykernel.sh 不存在，跳过"; exit 0; }
+          echo "=== 改前 ==="
+          grep -n "is_slot_device" "$AK" || true
+          sed -i 's/^is_slot_device=1;/is_slot_device=0;/' "$AK"
+          echo "=== 改后 ==="
+          grep -n "is_slot_device" "$AK"
+          grep -q "is_slot_device=0;" "$AK" || { echo "!!! is_slot_device 仍是 1，刷入会卡 fastboot"; exit 1; }
+
       - name: Inject Install Screen Text
         working-directory: kernel
         run: |
@@ -410,6 +423,11 @@ jobs:
           sha256sum out/arch/arm64/boot/Image
           echo "=== anykernel device names ==="
           grep -E '^(device\.name|kernel\.string)' out/ak3/anykernel.sh
+          echo "=== 包内关键项（必须 is_slot_device=0 且只剩 Image.gz） ==="
+          unzip -l "$ZIP" | grep -E "Image|dtb" || true
+          unzip -p "$ZIP" anykernel.sh | grep -n "is_slot_device" | tee /tmp/slot.txt
+          grep -q "is_slot_device=0;" /tmp/slot.txt || { echo "!!! 包内仍是 is_slot_device=1，刷入会卡 fastboot"; exit 1; }
+          unzip -l "$ZIP" | grep -qE " Image$" && { echo "!!! 包里还留着未压缩 Image"; exit 1; } || echo "OK：只剩 Image.gz"
 
       - name: Publish Release
         env:
