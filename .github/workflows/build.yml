@@ -219,6 +219,28 @@ jobs:
           path: /tmp/build_all.log
           retention-days: 3
 
+      - name: 缩小内核体积（Image 换成 Image.gz）
+        working-directory: kernel
+        run: |
+          set -e
+          SHRUNK=0
+          for p in out/ak3/Image out/ak3/kernels/Image; do
+            if [ -f "$p" ]; then
+              gzip -9 -c "$p" > "$p.gz"
+              rm -f "$p"
+              SHRUNK=1
+              echo "已压缩 $p -> $(stat -c%s "$p.gz") 字节"
+            fi
+          done
+          if [ "$SHRUNK" = "1" ]; then
+            echo "== 压缩后体积 =="
+            ls -lh out/ak3/Image.gz out/ak3/kernels/Image.gz 2>/dev/null || true
+            echo "== 确认根目录不再有未压缩 Image（免得 AK3 优先选它） =="
+            ls out/ak3/Image 2>/dev/null && exit 1 || echo "OK，只剩 Image.gz"
+          else
+            echo "没找到 Image，跳过"
+          fi
+
       - name: Patch ak3-core.sh（刷入修复固化）
         working-directory: kernel
         run: |
@@ -384,7 +406,7 @@ jobs:
           unzip -t "$ZIP" | tail -2
           unzip -l "$ZIP" | head -12
           echo "=== image ==="
-          ls -la out/arch/arm64/boot/Image out/arch/arm64/boot/dtbo.img out/ak3/kernels/Image 2>/dev/null || true
+          ls -la out/arch/arm64/boot/Image out/arch/arm64/boot/dtbo.img out/ak3/kernels/Image.gz out/ak3/Image.gz 2>/dev/null || true
           sha256sum out/arch/arm64/boot/Image
           echo "=== anykernel device names ==="
           grep -E '^(device\.name|kernel\.string)' out/ak3/anykernel.sh
