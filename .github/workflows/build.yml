@@ -141,16 +141,30 @@ jobs:
             thin)
               sed -i '/^CONFIG_THINLTO=y/d' $DEF
               echo "CONFIG_THINLTO=y" >> $DEF
+              # clang 24 的 KCFI 格式和 4.19 运行时对不上，启动早期校验失败会卡 fastboot。
+              # 显式关掉 CFI/SCS，不能只靠 defconfig 里原本有没有这一行。
+              sed -i '/^CONFIG_CFI_CLANG=/d;/^# CONFIG_CFI_CLANG is not set/d' $DEF
+              echo "# CONFIG_CFI_CLANG is not set" >> $DEF
+              sed -i '/^CONFIG_SHADOW_CALL_STACK=/d;/^# CONFIG_SHADOW_CALL_STACK is not set/d' $DEF
+              echo "# CONFIG_SHADOW_CALL_STACK is not set" >> $DEF
               ;;
             none)
               sed -i 's/^CONFIG_LTO_CLANG=y/# CONFIG_LTO_CLANG is not set/' $DEF
-              sed -i 's/^CONFIG_CFI_CLANG=y/# CONFIG_CFI_CLANG is not set/' $DEF
-              sed -i 's/^CONFIG_SHADOW_CALL_STACK=y/# CONFIG_SHADOW_CALL_STACK is not set/' $DEF
+              sed -i '/^CONFIG_CFI_CLANG=/d;/^# CONFIG_CFI_CLANG is not set/d' $DEF
+              echo "# CONFIG_CFI_CLANG is not set" >> $DEF
+              sed -i '/^CONFIG_SHADOW_CALL_STACK=/d;/^# CONFIG_SHADOW_CALL_STACK is not set/d' $DEF
+              echo "# CONFIG_SHADOW_CALL_STACK is not set" >> $DEF
               sed -i '/^CONFIG_LTO_NONE=y/d' $DEF
               echo "CONFIG_LTO_NONE=y" >> $DEF
               ;;
             full)
               sed -i '/^CONFIG_THINLTO=y/d' $DEF
+              sed -i '/CONFIG_THINLTO is not set/d' $DEF
+              echo "# CONFIG_THINLTO is not set" >> $DEF
+              sed -i '/^CONFIG_CFI_CLANG=/d;/^# CONFIG_CFI_CLANG is not set/d' $DEF
+              echo "# CONFIG_CFI_CLANG is not set" >> $DEF
+              sed -i '/^CONFIG_SHADOW_CALL_STACK=/d;/^# CONFIG_SHADOW_CALL_STACK is not set/d' $DEF
+              echo "# CONFIG_SHADOW_CALL_STACK is not set" >> $DEF
               ;;
           esac
           echo "=== LTO lines in defconfig ==="
@@ -409,6 +423,12 @@ jobs:
           esac
           echo "=== config proof ==="
           grep -E '^CONFIG_(LTO_CLANG|THINLTO|LTO_NONE|CFI_CLANG|KSU|KSU_MANUAL_HOOK|LOCALVERSION)=' out/.config || true
+          if grep -q '^CONFIG_CFI_CLANG=y' out/.config; then
+            echo "!!! CFI_CLANG 仍然开启，刷入会卡 fastboot"; exit 1
+          fi
+          if grep -q '^CONFIG_SHADOW_CALL_STACK=y' out/.config; then
+            echo "!!! SHADOW_CALL_STACK 仍然开启"; exit 1
+          fi
           echo "=== v2 优化项核验 ==="
           grep -E '^CONFIG_(KPM|KALLSYMS_ALL|FORTIFY_SOURCE|PANIC_TIMEOUT|KSU_SUSFS|KSU_SUSFS_ENABLE_LOG)=' out/.config || echo "(未全部出现)"
           echo "=== KSU 版本 ==="
